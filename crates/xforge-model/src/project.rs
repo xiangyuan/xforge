@@ -54,6 +54,10 @@ impl Project {
         &self.path
     }
     
+    pub fn set_path(&mut self, path: impl Into<PathBuf>) {
+        self.path = path.into();
+    }
+    
     pub fn registry_mut(&mut self) -> &mut Registry {
         &mut self.registry
     }
@@ -70,12 +74,19 @@ impl Project {
         &mut self.metadata
     }
     
-    pub fn save(&self) -> anyhow::Result<()> {
-        println!("Saving project to: {}", self.path.display());
-        Ok(())
+    pub fn root_id(&self) -> ObjectId {
+        self.root_id
     }
-    
-    pub fn load(_path: impl AsRef<Path>) -> anyhow::Result<Self> {
-        anyhow::bail!("Project loading not yet implemented")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_project_creation() {
+        let project = Project::new("TestProject");
+        assert_eq!(project.name(), "TestProject");
+        assert!(project.registry().is_empty());
     }
 }

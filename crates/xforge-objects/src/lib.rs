@@ -6,6 +6,11 @@ pub mod pbx_file_reference;
 pub mod pbx_group;
 pub mod pbx_build_configuration;
 pub mod pbx_build_phase;
+pub mod pbx_container_item_proxy;
+pub mod pbx_target_dependency;
+pub mod pbx_variant_group;
+pub mod pbx_reference_proxy;
+pub mod xc_swift_package;
 pub mod serialization;
 
 pub use pbx_project::{PBXProject, ProjectReference};
@@ -23,6 +28,14 @@ pub use pbx_build_phase::{
     PBXShellScriptBuildPhase,
     PBXCopyFilesBuildPhase,
     PBXBuildFile,
+};
+pub use pbx_container_item_proxy::PBXContainerItemProxy;
+pub use pbx_target_dependency::PBXTargetDependency;
+pub use pbx_variant_group::PBXVariantGroup;
+pub use pbx_reference_proxy::PBXReferenceProxy;
+pub use xc_swift_package::{
+    XCSwiftPackageProductDependency,
+    XCRemoteSwiftPackageReference,
 };
 pub use serialization::serialize_registry;
 
@@ -56,5 +69,32 @@ mod tests {
         
         let resources = PBXResourcesBuildPhase::new();
         assert_eq!(resources.isa(), "PBXResourcesBuildPhase");
+        
+        use xforge_core::ObjectId;
+        use crate::xc_swift_package::PackageRequirement;
+        
+        let container_id = ObjectId::generate();
+        let proxy = PBXContainerItemProxy::new(container_id, 1);
+        assert_eq!(proxy.isa(), "PBXContainerItemProxy");
+        
+        let dependency = PBXTargetDependency::new();
+        assert_eq!(dependency.isa(), "PBXTargetDependency");
+        
+        let variant_group = PBXVariantGroup::new("Main.storyboard");
+        assert_eq!(variant_group.isa(), "PBXVariantGroup");
+        
+        let remote_ref_id = ObjectId::generate();
+        let ref_proxy = PBXReferenceProxy::new("libFoo.a", "compiled.mach-o.dylib", remote_ref_id);
+        assert_eq!(ref_proxy.isa(), "PBXReferenceProxy");
+        
+        let package_id = ObjectId::generate();
+        let swift_product = XCSwiftPackageProductDependency::new(package_id, "Alamofire");
+        assert_eq!(swift_product.isa(), "XCSwiftPackageProductDependency");
+        
+        let swift_ref = XCRemoteSwiftPackageReference::new(
+            "https://github.com/Alamofire/Alamofire",
+            PackageRequirement::UpToNextMajorVersion("5.0.0".to_string())
+        );
+        assert_eq!(swift_ref.isa(), "XCRemoteSwiftPackageReference");
     }
 }

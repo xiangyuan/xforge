@@ -15,6 +15,11 @@ use crate::{
         PBXSourcesBuildPhase, PBXFrameworksBuildPhase, PBXResourcesBuildPhase,
         PBXShellScriptBuildPhase, PBXCopyFilesBuildPhase, PBXBuildFile,
     },
+    pbx_container_item_proxy::PBXContainerItemProxy,
+    pbx_target_dependency::PBXTargetDependency,
+    pbx_variant_group::PBXVariantGroup,
+    pbx_reference_proxy::PBXReferenceProxy,
+    xc_swift_package::{XCSwiftPackageProductDependency, XCRemoteSwiftPackageReference},
 };
 
 /// Serialize the entire registry to PlistValue
@@ -82,6 +87,18 @@ fn serialize_object(obj: &dyn PBXObject, _registry: &Registry) -> Option<PlistVa
         serialize_copy_files_phase(copy, &mut dict);
     } else if let Some(build_file) = any_obj.downcast_ref::<PBXBuildFile>() {
         serialize_build_file(build_file, &mut dict);
+    } else if let Some(proxy) = any_obj.downcast_ref::<PBXContainerItemProxy>() {
+        serialize_container_item_proxy(proxy, &mut dict);
+    } else if let Some(dependency) = any_obj.downcast_ref::<PBXTargetDependency>() {
+        serialize_target_dependency(dependency, &mut dict);
+    } else if let Some(variant_group) = any_obj.downcast_ref::<PBXVariantGroup>() {
+        serialize_variant_group(variant_group, &mut dict);
+    } else if let Some(ref_proxy) = any_obj.downcast_ref::<PBXReferenceProxy>() {
+        serialize_reference_proxy(ref_proxy, &mut dict);
+    } else if let Some(swift_product) = any_obj.downcast_ref::<XCSwiftPackageProductDependency>() {
+        serialize_swift_package_product_dependency(swift_product, &mut dict);
+    } else if let Some(swift_ref) = any_obj.downcast_ref::<XCRemoteSwiftPackageReference>() {
+        serialize_remote_swift_package_reference(swift_ref, &mut dict);
     }
     
     Some(PlistValue::Dictionary(dict))
@@ -245,6 +262,90 @@ fn serialize_build_file(build_file: &PBXBuildFile, dict: &mut IndexMap<String, P
         }
         dict.insert("settings".to_string(), PlistValue::Dictionary(settings_dict));
     }
+}
+
+fn serialize_container_item_proxy(proxy: &PBXContainerItemProxy, dict: &mut IndexMap<String, PlistValue>) {
+    dict.insert("containerPortal".to_string(), PlistValue::String(proxy.container_portal.to_string()));
+    
+    dict.insert("proxyType".to_string(), PlistValue::Integer(proxy.proxy_type as i64));
+    
+    if let Some(ref remote_id) = proxy.remote_global_id_string {
+        dict.insert("remoteGlobalIDString".to_string(), PlistValue::String(remote_id.clone()));
+    }
+    
+    if let Some(ref remote_info) = proxy.remote_info {
+        dict.insert("remoteInfo".to_string(), PlistValue::String(remote_info.clone()));
+    }
+}
+
+fn serialize_target_dependency(dependency: &PBXTargetDependency, dict: &mut IndexMap<String, PlistValue>) {
+    if let Some(ref target) = dependency.target {
+        dict.insert("target".to_string(), PlistValue::String(target.to_string()));
+    }
+    
+    if let Some(ref target_proxy) = dependency.target_proxy {
+        dict.insert("targetProxy".to_string(), PlistValue::String(target_proxy.to_string()));
+    }
+    
+    if let Some(ref name) = dependency.name {
+        dict.insert("name".to_string(), PlistValue::String(name.clone()));
+    }
+}
+
+fn serialize_variant_group(variant_group: &PBXVariantGroup, dict: &mut IndexMap<String, PlistValue>) {
+    if let Some(ref name) = variant_group.name {
+        dict.insert("name".to_string(), PlistValue::String(name.clone()));
+    }
+    
+    let children: Vec<PlistValue> = variant_group.children
+        .iter()
+        .map(|h| PlistValue::String(h.to_string()))
+        .collect();
+    dict.insert("children".to_string(), PlistValue::Array(children));
+    
+    dict.insert("sourceTree".to_string(), PlistValue::String(variant_group.source_tree.clone()));
+}
+
+fn serialize_reference_proxy(ref_proxy: &PBXReferenceProxy, dict: &mut IndexMap<String, PlistValue>) {
+    dict.insert("path".to_string(), PlistValue::String(ref_proxy.path.clone()));
+    dict.insert("fileType".to_string(), PlistValue::String(ref_proxy.file_type.clone()));
+    dict.insert("remoteRef".to_string(), PlistValue::String(ref_proxy.remote_ref.to_string()));
+    
+    dict.insert("sourceTree".to_string(), PlistValue::String(ref_proxy.source_tree.clone()));
+}
+
+fn serialize_swift_package_product_dependency(swift_product: &XCSwiftPackageProductDependency, dict: &mut IndexMap<String, PlistValue>) {
+    dict.insert("productName".to_string(), PlistValue::String(swift_product.product_name.clone()));
+    dict.insert("package".to_string(), PlistValue::String(swift_product.package.to_string()));
+}
+
+fn serialize_remote_swift_package_reference(swift_ref: &XCRemoteSwiftPackageReference, dict: &mut IndexMap<String, PlistValue>) {
+    dict.insert("repositoryURL".to_string(), PlistValue::String(swift_ref.repository_url.clone()));
+    
+    let mut req_dict = IndexMap::new();
+    match &swift_ref.requirement {
+        crate::xc_swift_package::PackageRequirement::UpToNextMajorVersion(version) => {
+            req_dict.insert("kind".to_string(), PlistValue::String("upToNextMajorVersion".to_string()));
+            req_dict.insert("minimumVersion".to_string(), PlistValue::String(version.clone()));
+        }
+        crate::xc_swift_package::PackageRequirement::UpToNextMinorVersion(version) => {
+            req_dict.insert("kind".to_string(), PlistValue::String("upToNextMinorVersion".to_string()));
+            req_dict.insert("minimumVersion".to_string(), PlistValue::String(version.clone()));
+        }
+        crate::xc_swift_package::PackageRequirement::Exact(version) => {
+            req_dict.insert("kind".to_string(), PlistValue::String("exactVersion".to_string()));
+            req_dict.insert("version".to_string(), PlistValue::String(version.clone()));
+        }
+        crate::xc_swift_package::PackageRequirement::Branch(branch) => {
+            req_dict.insert("kind".to_string(), PlistValue::String("branch".to_string()));
+            req_dict.insert("branch".to_string(), PlistValue::String(branch.clone()));
+        }
+        crate::xc_swift_package::PackageRequirement::Revision(revision) => {
+            req_dict.insert("kind".to_string(), PlistValue::String("revision".to_string()));
+            req_dict.insert("revision".to_string(), PlistValue::String(revision.clone()));
+        }
+    }
+    dict.insert("requirement".to_string(), PlistValue::Dictionary(req_dict));
 }
 
 #[cfg(test)]
