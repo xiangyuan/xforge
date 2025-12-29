@@ -33,7 +33,8 @@ mod tests {
         // UUID strings should be 24 characters
         let uuid1 = id1.to_uuid_string();
         assert_eq!(uuid1.len(), 24);
-        assert!(uuid1.chars().all(|c| c.is_ascii_hexdigit() && c.is_uppercase()));
+        assert!(uuid1.chars().all(|c| c.is_ascii_hexdigit()));
+        assert!(uuid1.chars().all(|c| !c.is_ascii_lowercase()));
     }
     
     #[test]
@@ -48,7 +49,6 @@ mod tests {
     #[test]
     fn test_registry_creation() {
         let registry = Registry::new();
-        // Just ensure it compiles and can be created
-        drop(registry);
+        assert_eq!(registry.len(), 0);
     }
 }

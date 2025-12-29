@@ -15,6 +15,16 @@ impl Registry {
             objects: HashMap::new(),
         }
     }
+    
+    /// Get the number of objects in the registry
+    pub fn len(&self) -> usize {
+        self.objects.len()
+    }
+    
+    /// Check if the registry is empty
+    pub fn is_empty(&self) -> bool {
+        self.objects.is_empty()
+    }
 }
 
 impl Default for Registry {
