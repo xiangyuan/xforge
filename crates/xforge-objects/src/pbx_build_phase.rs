@@ -34,6 +34,10 @@ impl PBXObject for PBXSourcesBuildPhase {
     fn as_any(&self) -> &dyn std::any::Any {
         self
     }
+    
+    fn as_any_mut(&mut self) -> &mut dyn std::any::Any {
+        self
+    }
 
 }
 
@@ -75,6 +79,10 @@ impl PBXObject for PBXFrameworksBuildPhase {
     fn as_any(&self) -> &dyn std::any::Any {
         self
     }
+    
+    fn as_any_mut(&mut self) -> &mut dyn std::any::Any {
+        self
+    }
 
 }
 
@@ -114,6 +122,10 @@ impl PBXObject for PBXResourcesBuildPhase {
     }
 
     fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+    
+    fn as_any_mut(&mut self) -> &mut dyn std::any::Any {
         self
     }
 
@@ -176,6 +188,10 @@ impl PBXObject for PBXShellScriptBuildPhase {
     fn as_any(&self) -> &dyn std::any::Any {
         self
     }
+    
+    fn as_any_mut(&mut self) -> &mut dyn std::any::Any {
+        self
+    }
 
 }
 
@@ -222,6 +238,10 @@ impl PBXObject for PBXCopyFilesBuildPhase {
     fn as_any(&self) -> &dyn std::any::Any {
         self
     }
+    
+    fn as_any_mut(&mut self) -> &mut dyn std::any::Any {
+        self
+    }
 
 }
 
@@ -254,6 +274,10 @@ impl PBXObject for PBXBuildFile {
     }
 
     fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+    
+    fn as_any_mut(&mut self) -> &mut dyn std::any::Any {
         self
     }
 

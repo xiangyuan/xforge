@@ -19,7 +19,14 @@ impl Registry {
     /// Register an object and return a handle
     pub fn register<T: PBXObject + 'static>(&mut self, object: T) -> Handle<T> {
         let id = ObjectId::generate();
-        let handle = Handle::from_id(id);
+        let handle = Handle::from_id(id.clone());
+        self.objects.insert(id.to_uuid_string(), Box::new(object));
+        handle
+    }
+    
+    /// Register an object with a specific ID
+    pub fn register_with_id<T: PBXObject + 'static>(&mut self, id: ObjectId, object: T) -> Handle<T> {
+        let handle = Handle::from_id(id.clone());
         self.objects.insert(id.to_uuid_string(), Box::new(object));
         handle
     }
@@ -44,6 +51,17 @@ impl Registry {
         self.objects
             .get(&id.to_uuid_string())
             .and_then(|obj| obj.as_any().downcast_ref::<T>())
+    }
+    
+    /// Get a mutable reference to an object by ID and downcast to specific type
+    pub fn get_mut<T: PBXObject + 'static>(&mut self, id: &ObjectId) -> Option<&mut T> {
+        self.objects
+            .get_mut(&id.to_uuid_string())
+            .and_then(|obj| {
+                // This is safe because we're borrowing mutably
+                let ptr = obj.as_mut() as *mut dyn PBXObject;
+                unsafe { (*ptr).as_any_mut() }.downcast_mut::<T>()
+            })
     }
 }
 

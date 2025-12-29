@@ -15,6 +15,8 @@ pub mod pbx_legacy_target;
 pub mod xc_swift_package;
 pub mod xc_version_group;
 pub mod serialization;
+pub mod deserialization;
+pub mod project;
 
 pub use pbx_project::{PBXProject, ProjectReference};
 pub use pbx_target::PBXNativeTarget;
@@ -45,6 +47,8 @@ pub use xc_swift_package::{
 };
 pub use xc_version_group::XCVersionGroup;
 pub use serialization::serialize_registry;
+pub use deserialization::deserialize_registry;
+pub use project::Project;
 
 #[cfg(test)]
 mod tests {

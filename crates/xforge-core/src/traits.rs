@@ -12,4 +12,7 @@ pub trait PBXObject: std::any::Any + std::fmt::Debug {
     
     /// Downcast to Any for type checking
     fn as_any(&self) -> &dyn std::any::Any;
+    
+    /// Downcast to Any (mutable) for type checking
+    fn as_any_mut(&mut self) -> &mut dyn std::any::Any;
 }

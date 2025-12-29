@@ -299,3 +299,37 @@ mod tests {
         assert!(banana_pos < zebra_pos);
     }
 }
+
+impl PlistValue {
+    /// Try to get as dictionary
+    pub fn as_dictionary(&self) -> Option<&IndexMap<String, PlistValue>> {
+        match self {
+            PlistValue::Dictionary(d) => Some(d),
+            _ => None,
+        }
+    }
+    
+    /// Try to get as array
+    pub fn as_array(&self) -> Option<&Vec<PlistValue>> {
+        match self {
+            PlistValue::Array(a) => Some(a),
+            _ => None,
+        }
+    }
+    
+    /// Try to get as string
+    pub fn as_string(&self) -> Option<&str> {
+        match self {
+            PlistValue::String(s) => Some(s),
+            _ => None,
+        }
+    }
+    
+    /// Try to get as integer
+    pub fn as_integer(&self) -> Option<i64> {
+        match self {
+            PlistValue::Integer(i) => Some(*i),
+            _ => None,
+        }
+    }
+}
