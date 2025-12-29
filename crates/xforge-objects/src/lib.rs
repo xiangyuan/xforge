@@ -6,6 +6,7 @@ pub mod pbx_file_reference;
 pub mod pbx_group;
 pub mod pbx_build_configuration;
 pub mod pbx_build_phase;
+pub mod serialization;
 
 pub use pbx_project::{PBXProject, ProjectReference};
 pub use pbx_target::PBXNativeTarget;
@@ -23,6 +24,7 @@ pub use pbx_build_phase::{
     PBXCopyFilesBuildPhase,
     PBXBuildFile,
 };
+pub use serialization::serialize_registry;
 
 #[cfg(test)]
 mod tests {

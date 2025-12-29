@@ -6,9 +6,9 @@ use xforge_core::{ObjectId, Handle, PBXObject};
 #[derive(Debug, Clone)]
 pub struct PBXSourcesBuildPhase {
     id: ObjectId,
-    files: Vec<Handle<PBXBuildFile>>,
-    build_action_mask: u32,
-    run_only_for_deployment_postprocessing: bool,
+    pub files: Vec<Handle<PBXBuildFile>>,
+    pub build_action_mask: u32,
+    pub run_only_for_deployment_postprocessing: bool,
 }
 
 impl PBXSourcesBuildPhase {
@@ -21,17 +21,12 @@ impl PBXSourcesBuildPhase {
         }
     }
     
-    pub fn files(&self) -> &[Handle<PBXBuildFile>] {
-        &self.files
-    }
-    
     pub fn add_file(&mut self, file: Handle<PBXBuildFile>) {
         self.files.push(file);
     }
 }
 
 impl PBXObject for PBXSourcesBuildPhase {
-    
     fn isa(&self) -> &'static str {
         "PBXSourcesBuildPhase"
     }
@@ -47,9 +42,9 @@ impl Default for PBXSourcesBuildPhase {
 #[derive(Debug, Clone)]
 pub struct PBXFrameworksBuildPhase {
     id: ObjectId,
-    files: Vec<Handle<PBXBuildFile>>,
-    build_action_mask: u32,
-    run_only_for_deployment_postprocessing: bool,
+    pub files: Vec<Handle<PBXBuildFile>>,
+    pub build_action_mask: u32,
+    pub run_only_for_deployment_postprocessing: bool,
 }
 
 impl PBXFrameworksBuildPhase {
@@ -62,17 +57,12 @@ impl PBXFrameworksBuildPhase {
         }
     }
     
-    pub fn files(&self) -> &[Handle<PBXBuildFile>] {
-        &self.files
-    }
-    
     pub fn add_file(&mut self, file: Handle<PBXBuildFile>) {
         self.files.push(file);
     }
 }
 
 impl PBXObject for PBXFrameworksBuildPhase {
-    
     fn isa(&self) -> &'static str {
         "PBXFrameworksBuildPhase"
     }
@@ -88,9 +78,9 @@ impl Default for PBXFrameworksBuildPhase {
 #[derive(Debug, Clone)]
 pub struct PBXResourcesBuildPhase {
     id: ObjectId,
-    files: Vec<Handle<PBXBuildFile>>,
-    build_action_mask: u32,
-    run_only_for_deployment_postprocessing: bool,
+    pub files: Vec<Handle<PBXBuildFile>>,
+    pub build_action_mask: u32,
+    pub run_only_for_deployment_postprocessing: bool,
 }
 
 impl PBXResourcesBuildPhase {
@@ -103,17 +93,12 @@ impl PBXResourcesBuildPhase {
         }
     }
     
-    pub fn files(&self) -> &[Handle<PBXBuildFile>] {
-        &self.files
-    }
-    
     pub fn add_file(&mut self, file: Handle<PBXBuildFile>) {
         self.files.push(file);
     }
 }
 
 impl PBXObject for PBXResourcesBuildPhase {
-    
     fn isa(&self) -> &'static str {
         "PBXResourcesBuildPhase"
     }
@@ -129,15 +114,14 @@ impl Default for PBXResourcesBuildPhase {
 #[derive(Debug, Clone)]
 pub struct PBXShellScriptBuildPhase {
     id: ObjectId,
-    files: Vec<Handle<PBXBuildFile>>,
-    build_action_mask: u32,
-    run_only_for_deployment_postprocessing: bool,
-    shell_path: String,
-    shell_script: String,
-    name: Option<String>,
-    input_paths: Vec<String>,
-    output_paths: Vec<String>,
-    show_env_vars_in_log: bool,
+    pub files: Vec<Handle<PBXBuildFile>>,
+    pub build_action_mask: u32,
+    pub run_only_for_deployment_postprocessing: bool,
+    pub shell_path: String,
+    pub shell_script: String,
+    pub name: Option<String>,
+    pub input_paths: Vec<String>,
+    pub output_paths: Vec<String>,
 }
 
 impl PBXShellScriptBuildPhase {
@@ -152,7 +136,6 @@ impl PBXShellScriptBuildPhase {
             name: None,
             input_paths: Vec::new(),
             output_paths: Vec::new(),
-            show_env_vars_in_log: true,
         }
     }
     
@@ -168,18 +151,9 @@ impl PBXShellScriptBuildPhase {
     pub fn add_output_path(&mut self, path: impl Into<String>) {
         self.output_paths.push(path.into());
     }
-    
-    pub fn shell_script(&self) -> &str {
-        &self.shell_script
-    }
-    
-    pub fn name(&self) -> Option<&str> {
-        self.name.as_deref()
-    }
 }
 
 impl PBXObject for PBXShellScriptBuildPhase {
-    
     fn isa(&self) -> &'static str {
         "PBXShellScriptBuildPhase"
     }
@@ -189,12 +163,12 @@ impl PBXObject for PBXShellScriptBuildPhase {
 #[derive(Debug, Clone)]
 pub struct PBXCopyFilesBuildPhase {
     id: ObjectId,
-    files: Vec<Handle<PBXBuildFile>>,
-    build_action_mask: u32,
-    run_only_for_deployment_postprocessing: bool,
-    dst_path: String,
-    dst_subfolder_spec: u32,
-    name: Option<String>,
+    pub files: Vec<Handle<PBXBuildFile>>,
+    pub build_action_mask: u32,
+    pub run_only_for_deployment_postprocessing: bool,
+    pub dst_path: String,
+    pub dst_subfolder_spec: u32,
+    pub name: Option<String>,
 }
 
 impl PBXCopyFilesBuildPhase {
@@ -221,18 +195,17 @@ impl PBXCopyFilesBuildPhase {
 }
 
 impl PBXObject for PBXCopyFilesBuildPhase {
-    
     fn isa(&self) -> &'static str {
         "PBXCopyFilesBuildPhase"
     }
 }
 
-/// Build file reference
+/// Build file
 #[derive(Debug, Clone)]
 pub struct PBXBuildFile {
     id: ObjectId,
-    file_ref: Handle<crate::PBXFileReference>,
-    settings: Option<std::collections::HashMap<String, String>>,
+    pub file_ref: Handle<crate::PBXFileReference>,
+    pub settings: Option<std::collections::HashMap<String, String>>,
 }
 
 impl PBXBuildFile {
@@ -248,18 +221,9 @@ impl PBXBuildFile {
         self.settings = Some(settings);
         self
     }
-    
-    pub fn file_ref(&self) -> &Handle<crate::PBXFileReference> {
-        &self.file_ref
-    }
-    
-    pub fn settings(&self) -> Option<&std::collections::HashMap<String, String>> {
-        self.settings.as_ref()
-    }
 }
 
 impl PBXObject for PBXBuildFile {
-    
     fn isa(&self) -> &'static str {
         "PBXBuildFile"
     }
@@ -273,7 +237,7 @@ mod tests {
     fn test_sources_build_phase() {
         let phase = PBXSourcesBuildPhase::new();
         assert_eq!(phase.isa(), "PBXSourcesBuildPhase");
-        assert_eq!(phase.files().len(), 0);
+        assert_eq!(phase.files.len(), 0);
     }
 
     #[test]
@@ -289,20 +253,19 @@ mod tests {
     }
 
     #[test]
-    fn test_shell_script_build_phase() {
-        let phase = PBXShellScriptBuildPhase::new("echo 'Hello'")
+    fn test_shell_script_phase() {
+        let phase = PBXShellScriptBuildPhase::new("echo hello")
             .with_name("Run Script");
-        
         assert_eq!(phase.isa(), "PBXShellScriptBuildPhase");
-        assert_eq!(phase.shell_script(), "echo 'Hello'");
-        assert_eq!(phase.name(), Some("Run Script"));
+        assert_eq!(phase.shell_script, "echo hello");
+        assert_eq!(phase.name, Some("Run Script".to_string()));
     }
 
     #[test]
-    fn test_copy_files_build_phase() {
+    fn test_copy_files_phase() {
         let phase = PBXCopyFilesBuildPhase::new("", 16)
             .with_name("Embed Frameworks");
-        
         assert_eq!(phase.isa(), "PBXCopyFilesBuildPhase");
+        assert_eq!(phase.dst_subfolder_spec, 16);
     }
 }

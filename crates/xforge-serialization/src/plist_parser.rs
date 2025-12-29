@@ -35,7 +35,8 @@ impl PlistParser {
             '{' => self.parse_dictionary(),
             '(' => self.parse_array(),
             '"' => self.parse_quoted_string(),
-            _ => self.parse_unquoted_string(),
+            '<' => self.parse_data(),
+            _ => self.parse_unquoted_value(),
         }
     }
     
@@ -93,6 +94,33 @@ impl PlistParser {
         Ok(PlistValue::Array(arr))
     }
     
+    fn parse_data(&mut self) -> Result<PlistValue, String> {
+        self.expect_char('<')?;
+        let mut bytes = Vec::new();
+        
+        while self.pos < self.input.len() {
+            self.skip_whitespace();
+            if self.input[self.pos] == '>' {
+                self.pos += 1;
+                return Ok(PlistValue::Data(bytes));
+            }
+            
+            // Parse two hex digits
+            if self.pos + 1 >= self.input.len() {
+                return Err("Incomplete hex byte in data".to_string());
+            }
+            
+            let hex_str: String = self.input[self.pos..self.pos+2].iter().collect();
+            match u8::from_str_radix(&hex_str, 16) {
+                Ok(byte) => bytes.push(byte),
+                Err(_) => return Err(format!("Invalid hex byte: {}", hex_str)),
+            }
+            self.pos += 2;
+        }
+        
+        Err("Unterminated data".to_string())
+    }
+    
     fn parse_string(&mut self) -> Result<String, String> {
         self.skip_whitespace();
         if self.pos < self.input.len() && self.input[self.pos] == '"' {
@@ -104,13 +132,7 @@ impl PlistParser {
                 }
             })
         } else {
-            self.parse_unquoted_string().map(|v| {
-                if let PlistValue::String(s) = v {
-                    s
-                } else {
-                    unreachable!()
-                }
-            })
+            self.parse_unquoted_string()
         }
     }
     
@@ -148,7 +170,7 @@ impl PlistParser {
         Err("Unterminated string".to_string())
     }
     
-    fn parse_unquoted_string(&mut self) -> Result<PlistValue, String> {
+    fn parse_unquoted_string(&mut self) -> Result<String, String> {
         let mut result = String::new();
         
         while self.pos < self.input.len() {
@@ -165,8 +187,32 @@ impl PlistParser {
         if result.is_empty() {
             Err("Empty unquoted string".to_string())
         } else {
-            Ok(PlistValue::String(result))
+            Ok(result)
         }
+    }
+    
+    fn parse_unquoted_value(&mut self) -> Result<PlistValue, String> {
+        let s = self.parse_unquoted_string()?;
+        
+        // Try to parse as boolean
+        if s == "YES" {
+            return Ok(PlistValue::Boolean(true));
+        } else if s == "NO" {
+            return Ok(PlistValue::Boolean(false));
+        }
+        
+        // Try to parse as integer
+        if let Ok(i) = s.parse::<i64>() {
+            return Ok(PlistValue::Integer(i));
+        }
+        
+        // Try to parse as real (float)
+        if let Ok(f) = s.parse::<f64>() {
+            return Ok(PlistValue::Real(f));
+        }
+        
+        // Otherwise, treat as string
+        Ok(PlistValue::String(s))
     }
     
     fn expect_char(&mut self, expected: char) -> Result<(), String> {
@@ -188,11 +234,13 @@ impl PlistParser {
                 self.pos += 1;
             } else if self.pos + 1 < self.input.len() && c == '/' {
                 if self.input[self.pos + 1] == '/' {
+                    // Single-line comment
                     self.pos += 2;
                     while self.pos < self.input.len() && self.input[self.pos] != '\n' {
                         self.pos += 1;
                     }
                 } else if self.input[self.pos + 1] == '*' {
+                    // Multi-line comment
                     self.pos += 2;
                     while self.pos + 1 < self.input.len() {
                         if self.input[self.pos] == '*' && self.input[self.pos + 1] == '/' {
@@ -228,6 +276,41 @@ mod tests {
         let result = parser.parse().unwrap();
         assert_eq!(result, PlistValue::String("test file.txt".to_string()));
     }
+    
+    #[test]
+    fn test_parse_integer() {
+        let mut parser = PlistParser::new("42");
+        let result = parser.parse().unwrap();
+        assert_eq!(result, PlistValue::Integer(42));
+    }
+    
+    #[test]
+    fn test_parse_real() {
+        let mut parser = PlistParser::new("3.14");
+        let result = parser.parse().unwrap();
+        assert_eq!(result, PlistValue::Real(3.14));
+    }
+    
+    #[test]
+    fn test_parse_boolean_yes() {
+        let mut parser = PlistParser::new("YES");
+        let result = parser.parse().unwrap();
+        assert_eq!(result, PlistValue::Boolean(true));
+    }
+    
+    #[test]
+    fn test_parse_boolean_no() {
+        let mut parser = PlistParser::new("NO");
+        let result = parser.parse().unwrap();
+        assert_eq!(result, PlistValue::Boolean(false));
+    }
+    
+    #[test]
+    fn test_parse_data() {
+        let mut parser = PlistParser::new("<DEADBEEF>");
+        let result = parser.parse().unwrap();
+        assert_eq!(result, PlistValue::Data(vec![0xDE, 0xAD, 0xBE, 0xEF]));
+    }
 
     #[test]
     fn test_parse_array() {
@@ -235,6 +318,21 @@ mod tests {
         let result = parser.parse().unwrap();
         if let PlistValue::Array(arr) = result {
             assert_eq!(arr.len(), 3);
+        } else {
+            panic!("Expected array");
+        }
+    }
+    
+    #[test]
+    fn test_parse_array_with_mixed_types() {
+        let mut parser = PlistParser::new("(42, 3.14, YES, \"string\")");
+        let result = parser.parse().unwrap();
+        if let PlistValue::Array(arr) = result {
+            assert_eq!(arr.len(), 4);
+            assert_eq!(arr[0], PlistValue::Integer(42));
+            assert_eq!(arr[1], PlistValue::Real(3.14));
+            assert_eq!(arr[2], PlistValue::Boolean(true));
+            assert_eq!(arr[3], PlistValue::String("string".to_string()));
         } else {
             panic!("Expected array");
         }
@@ -247,6 +345,20 @@ mod tests {
         if let PlistValue::Dictionary(dict) = result {
             assert_eq!(dict.len(), 2);
             assert_eq!(dict.get("key1").unwrap(), &PlistValue::String("value1".to_string()));
+        } else {
+            panic!("Expected dictionary");
+        }
+    }
+    
+    #[test]
+    fn test_parse_dictionary_with_mixed_values() {
+        let mut parser = PlistParser::new("{ count = 42; ratio = 3.14; enabled = YES; }");
+        let result = parser.parse().unwrap();
+        if let PlistValue::Dictionary(dict) = result {
+            assert_eq!(dict.len(), 3);
+            assert_eq!(dict.get("count").unwrap(), &PlistValue::Integer(42));
+            assert_eq!(dict.get("ratio").unwrap(), &PlistValue::Real(3.14));
+            assert_eq!(dict.get("enabled").unwrap(), &PlistValue::Boolean(true));
         } else {
             panic!("Expected dictionary");
         }

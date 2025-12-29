@@ -2,6 +2,7 @@
 
 use crate::ObjectId;
 use std::marker::PhantomData;
+use std::fmt;
 
 /// Type-safe handle for PBX objects
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -11,16 +12,27 @@ pub struct Handle<T> {
 }
 
 impl<T> Handle<T> {
-    /// Create a new handle
-    pub(crate) fn new(id: ObjectId) -> Self {
+    /// Create a new handle from ObjectId
+    pub fn from_id(id: ObjectId) -> Self {
         Self {
             id,
             _phantom: PhantomData,
         }
     }
     
+    /// Create a new handle (internal use)
+    pub(crate) fn new(id: ObjectId) -> Self {
+        Self::from_id(id)
+    }
+    
     /// Get the underlying ObjectId
     pub fn id(&self) -> ObjectId {
         self.id
+    }
+}
+
+impl<T> fmt::Display for Handle<T> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.id)
     }
 }

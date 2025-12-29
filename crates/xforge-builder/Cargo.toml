@@ -8,4 +8,5 @@ license.workspace = true
 [dependencies]
 xforge-core.workspace = true
 xforge-model.workspace = true
+xforge-objects.workspace = true
 anyhow.workspace = true

@@ -4,7 +4,7 @@ use xforge_core::{ObjectId, PBXObject};
 
 #[derive(Debug, Clone)]
 pub struct PBXFileReference {
-    pub id: ObjectId,
+    id: ObjectId,
     pub path: Option<String>,
     pub name: Option<String>,
     pub last_known_file_type: Option<String>,
@@ -25,14 +25,18 @@ impl PBXFileReference {
             explicit_file_type: None,
         }
     }
+    
+    pub fn path(&self) -> Option<&str> {
+        self.path.as_deref()
+    }
+    
+    pub fn source_tree(&self) -> Option<&str> {
+        Some(&self.source_tree)
+    }
 }
 
 impl PBXObject for PBXFileReference {
     fn isa(&self) -> &'static str {
         "PBXFileReference"
-    }
-    
-    fn name(&self) -> Option<&str> {
-        self.name.as_deref().or_else(|| self.path.as_deref())
     }
 }

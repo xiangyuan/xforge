@@ -1,10 +1,11 @@
 //! PBXTarget and its variants
 
 use xforge_core::{ObjectId, PBXObject};
+use xforge_model::ProductType;
 
 #[derive(Debug, Clone)]
 pub struct PBXNativeTarget {
-    pub id: ObjectId,
+    id: ObjectId,
     pub name: String,
     pub build_configuration_list: Option<ObjectId>,
     pub build_phases: Vec<ObjectId>,
@@ -12,7 +13,7 @@ pub struct PBXNativeTarget {
     pub dependencies: Vec<ObjectId>,
     pub product_name: Option<String>,
     pub product_reference: Option<ObjectId>,
-    pub product_type: Option<String>,
+    pub product_type: Option<ProductType>,
 }
 
 impl PBXNativeTarget {
@@ -29,14 +30,38 @@ impl PBXNativeTarget {
             product_type: None,
         }
     }
+    
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+    
+    pub fn product_name(&self) -> Option<&str> {
+        self.product_name.as_deref()
+    }
+    
+    pub fn product_type(&self) -> Option<ProductType> {
+        self.product_type.clone()
+    }
+    
+    pub fn build_phases(&self) -> &[ObjectId] {
+        &self.build_phases
+    }
+    
+    pub fn set_product_name(&mut self, name: &str) {
+        self.product_name = Some(name.to_string());
+    }
+    
+    pub fn set_product_type(&mut self, product_type: ProductType) {
+        self.product_type = Some(product_type);
+    }
+    
+    pub fn add_build_phase(&mut self, phase_id: ObjectId) {
+        self.build_phases.push(phase_id);
+    }
 }
 
 impl PBXObject for PBXNativeTarget {
     fn isa(&self) -> &'static str {
         "PBXNativeTarget"
-    }
-    
-    fn name(&self) -> Option<&str> {
-        Some(&self.name)
     }
 }
