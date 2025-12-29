@@ -36,6 +36,11 @@ impl PBXObject for XCBuildConfiguration {
     fn isa(&self) -> &'static str {
         "XCBuildConfiguration"
     }
+
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+
 }
 
 #[derive(Debug, Clone)]
@@ -87,6 +92,11 @@ impl PBXObject for XCConfigurationList {
     fn isa(&self) -> &'static str {
         "XCConfigurationList"
     }
+
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+
 }
 
 #[cfg(test)]

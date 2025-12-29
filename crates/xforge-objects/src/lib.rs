@@ -10,7 +10,10 @@ pub mod pbx_container_item_proxy;
 pub mod pbx_target_dependency;
 pub mod pbx_variant_group;
 pub mod pbx_reference_proxy;
+pub mod pbx_aggregate_target;
+pub mod pbx_legacy_target;
 pub mod xc_swift_package;
+pub mod xc_version_group;
 pub mod serialization;
 
 pub use pbx_project::{PBXProject, ProjectReference};
@@ -33,10 +36,14 @@ pub use pbx_container_item_proxy::PBXContainerItemProxy;
 pub use pbx_target_dependency::PBXTargetDependency;
 pub use pbx_variant_group::PBXVariantGroup;
 pub use pbx_reference_proxy::PBXReferenceProxy;
+pub use pbx_aggregate_target::PBXAggregateTarget;
+pub use pbx_legacy_target::PBXLegacyTarget;
 pub use xc_swift_package::{
     XCSwiftPackageProductDependency,
     XCRemoteSwiftPackageReference,
+    PackageRequirement,
 };
+pub use xc_version_group::XCVersionGroup;
 pub use serialization::serialize_registry;
 
 #[cfg(test)]
@@ -96,5 +103,14 @@ mod tests {
             PackageRequirement::UpToNextMajorVersion("5.0.0".to_string())
         );
         assert_eq!(swift_ref.isa(), "XCRemoteSwiftPackageReference");
+        
+        let aggregate_target = PBXAggregateTarget::new("BuildAll");
+        assert_eq!(aggregate_target.isa(), "PBXAggregateTarget");
+        
+        let legacy_target = PBXLegacyTarget::new("ExternalBuild", "/usr/bin/make");
+        assert_eq!(legacy_target.isa(), "PBXLegacyTarget");
+        
+        let version_group = XCVersionGroup::new("Model.xcdatamodeld");
+        assert_eq!(version_group.isa(), "XCVersionGroup");
     }
 }

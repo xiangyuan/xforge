@@ -30,6 +30,11 @@ impl PBXObject for PBXSourcesBuildPhase {
     fn isa(&self) -> &'static str {
         "PBXSourcesBuildPhase"
     }
+
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+
 }
 
 impl Default for PBXSourcesBuildPhase {
@@ -66,6 +71,11 @@ impl PBXObject for PBXFrameworksBuildPhase {
     fn isa(&self) -> &'static str {
         "PBXFrameworksBuildPhase"
     }
+
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+
 }
 
 impl Default for PBXFrameworksBuildPhase {
@@ -102,6 +112,11 @@ impl PBXObject for PBXResourcesBuildPhase {
     fn isa(&self) -> &'static str {
         "PBXResourcesBuildPhase"
     }
+
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+
 }
 
 impl Default for PBXResourcesBuildPhase {
@@ -157,6 +172,11 @@ impl PBXObject for PBXShellScriptBuildPhase {
     fn isa(&self) -> &'static str {
         "PBXShellScriptBuildPhase"
     }
+
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+
 }
 
 /// Copy files build phase
@@ -198,6 +218,11 @@ impl PBXObject for PBXCopyFilesBuildPhase {
     fn isa(&self) -> &'static str {
         "PBXCopyFilesBuildPhase"
     }
+
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+
 }
 
 /// Build file
@@ -227,6 +252,11 @@ impl PBXObject for PBXBuildFile {
     fn isa(&self) -> &'static str {
         "PBXBuildFile"
     }
+
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+
 }
 
 #[cfg(test)]

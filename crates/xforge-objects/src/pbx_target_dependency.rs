@@ -47,4 +47,9 @@ impl PBXObject for PBXTargetDependency {
     fn isa(&self) -> &'static str {
         "PBXTargetDependency"
     }
+
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+
 }

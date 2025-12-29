@@ -9,4 +9,7 @@ pub trait PBXObject: std::any::Any + std::fmt::Debug {
     fn name(&self) -> Option<&str> {
         None
     }
+    
+    /// Downcast to Any for type checking
+    fn as_any(&self) -> &dyn std::any::Any;
 }

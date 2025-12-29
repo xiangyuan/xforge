@@ -39,4 +39,9 @@ impl PBXObject for PBXFileReference {
     fn isa(&self) -> &'static str {
         "PBXFileReference"
     }
+
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+
 }

@@ -38,6 +38,13 @@ impl Registry {
     pub fn iter(&self) -> impl Iterator<Item = (&String, &Box<dyn PBXObject>)> {
         self.objects.iter()
     }
+    
+    /// Get an object by ID and downcast to specific type
+    pub fn get<T: PBXObject + 'static>(&self, id: &ObjectId) -> Option<&T> {
+        self.objects
+            .get(&id.to_uuid_string())
+            .and_then(|obj| obj.as_any().downcast_ref::<T>())
+    }
 }
 
 impl Default for Registry {

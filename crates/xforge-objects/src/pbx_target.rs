@@ -64,4 +64,9 @@ impl PBXObject for PBXNativeTarget {
     fn isa(&self) -> &'static str {
         "PBXNativeTarget"
     }
+
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+
 }

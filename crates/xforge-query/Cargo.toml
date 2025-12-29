@@ -1,11 +1,13 @@
 [package]
 name = "xforge-query"
-version.workspace = true
-edition.workspace = true
-authors.workspace = true
-license.workspace = true
+version = "0.1.0"
+edition = "2021"
 
 [dependencies]
-anyhow.workspace = true
-thiserror.workspace = true
-serde.workspace = true
+xforge-core = { path = "../xforge-core" }
+xforge-model = { path = "../xforge-model" }
+xforge-objects = { path = "../xforge-objects" }
+anyhow = "1.0"
+thiserror = "1.0"
+
+[dev-dependencies]

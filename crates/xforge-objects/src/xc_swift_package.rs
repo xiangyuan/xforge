@@ -28,6 +28,11 @@ impl PBXObject for XCSwiftPackageProductDependency {
     fn isa(&self) -> &'static str {
         "XCSwiftPackageProductDependency"
     }
+
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+
 }
 
 /// Remote Swift Package Reference
@@ -65,6 +70,11 @@ impl PBXObject for XCRemoteSwiftPackageReference {
     fn isa(&self) -> &'static str {
         "XCRemoteSwiftPackageReference"
     }
+
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+
 }
 
 #[cfg(test)]

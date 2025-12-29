@@ -75,6 +75,11 @@ impl PBXObject for PBXProject {
     fn isa(&self) -> &'static str {
         "PBXProject"
     }
+
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+
 }
 
 #[cfg(test)]

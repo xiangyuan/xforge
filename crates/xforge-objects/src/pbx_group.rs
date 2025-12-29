@@ -43,6 +43,11 @@ impl PBXObject for PBXGroup {
     fn isa(&self) -> &'static str {
         "PBXGroup"
     }
+
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+
 }
 
 use crate::PBXFileReference;

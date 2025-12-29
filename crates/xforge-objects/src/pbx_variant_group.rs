@@ -39,6 +39,11 @@ impl PBXObject for PBXVariantGroup {
     fn isa(&self) -> &'static str {
         "PBXVariantGroup"
     }
+
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+
 }
 
 #[cfg(test)]

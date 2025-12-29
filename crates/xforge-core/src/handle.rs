@@ -26,8 +26,8 @@ impl<T> Handle<T> {
     }
     
     /// Get the underlying ObjectId
-    pub fn id(&self) -> ObjectId {
-        self.id
+    pub fn id(&self) -> &ObjectId {
+        &self.id
     }
 }
 

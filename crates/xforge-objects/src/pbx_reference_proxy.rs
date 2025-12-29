@@ -28,4 +28,9 @@ impl PBXObject for PBXReferenceProxy {
     fn isa(&self) -> &'static str {
         "PBXReferenceProxy"
     }
+
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+
 }

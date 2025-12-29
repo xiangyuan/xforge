@@ -38,4 +38,9 @@ impl PBXObject for PBXContainerItemProxy {
     fn isa(&self) -> &'static str {
         "PBXContainerItemProxy"
     }
+
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+
 }

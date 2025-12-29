@@ -19,7 +19,10 @@ use crate::{
     pbx_target_dependency::PBXTargetDependency,
     pbx_variant_group::PBXVariantGroup,
     pbx_reference_proxy::PBXReferenceProxy,
+    pbx_aggregate_target::PBXAggregateTarget,
+    pbx_legacy_target::PBXLegacyTarget,
     xc_swift_package::{XCSwiftPackageProductDependency, XCRemoteSwiftPackageReference},
+    xc_version_group::XCVersionGroup,
 };
 
 /// Serialize the entire registry to PlistValue
@@ -99,6 +102,12 @@ fn serialize_object(obj: &dyn PBXObject, _registry: &Registry) -> Option<PlistVa
         serialize_swift_package_product_dependency(swift_product, &mut dict);
     } else if let Some(swift_ref) = any_obj.downcast_ref::<XCRemoteSwiftPackageReference>() {
         serialize_remote_swift_package_reference(swift_ref, &mut dict);
+    } else if let Some(aggregate) = any_obj.downcast_ref::<PBXAggregateTarget>() {
+        serialize_aggregate_target(aggregate, &mut dict);
+    } else if let Some(legacy) = any_obj.downcast_ref::<PBXLegacyTarget>() {
+        serialize_legacy_target(legacy, &mut dict);
+    } else if let Some(version_group) = any_obj.downcast_ref::<XCVersionGroup>() {
+        serialize_version_group(version_group, &mut dict);
     }
     
     Some(PlistValue::Dictionary(dict))
@@ -367,4 +376,76 @@ mod tests {
             panic!("Expected dictionary");
         }
     }
+}
+
+fn serialize_aggregate_target(target: &PBXAggregateTarget, dict: &mut IndexMap<String, PlistValue>) {
+    dict.insert("name".to_string(), PlistValue::String(target.name().to_string()));
+    
+    if let Some(product_name) = target.product_name() {
+        dict.insert("productName".to_string(), PlistValue::String(product_name.to_string()));
+    }
+    
+    if let Some(config_list) = target.build_configuration_list() {
+        dict.insert("buildConfigurationList".to_string(), PlistValue::String(config_list.to_string()));
+    }
+    
+    let phases: Vec<PlistValue> = target.build_phases()
+        .iter()
+        .map(|h| PlistValue::String(h.to_string()))
+        .collect();
+    dict.insert("buildPhases".to_string(), PlistValue::Array(phases));
+    
+    let deps: Vec<PlistValue> = target.dependencies()
+        .iter()
+        .map(|h| PlistValue::String(h.to_string()))
+        .collect();
+    dict.insert("dependencies".to_string(), PlistValue::Array(deps));
+}
+
+fn serialize_legacy_target(target: &PBXLegacyTarget, dict: &mut IndexMap<String, PlistValue>) {
+    dict.insert("name".to_string(), PlistValue::String(target.name().to_string()));
+    
+    if let Some(product_name) = target.product_name() {
+        dict.insert("productName".to_string(), PlistValue::String(product_name.to_string()));
+    }
+    
+    if let Some(config_list) = target.build_configuration_list() {
+        dict.insert("buildConfigurationList".to_string(), PlistValue::String(config_list.to_string()));
+    }
+    
+    dict.insert("buildToolPath".to_string(), PlistValue::String(target.build_tool_path().to_string()));
+    
+    if let Some(args) = target.build_arguments_string() {
+        dict.insert("buildArgumentsString".to_string(), PlistValue::String(args.to_string()));
+    }
+    
+    if let Some(working_dir) = target.build_working_directory() {
+        dict.insert("buildWorkingDirectory".to_string(), PlistValue::String(working_dir.to_string()));
+    }
+    
+    dict.insert("passBuildSettingsInEnvironment".to_string(), 
+        PlistValue::Integer(if target.pass_build_settings_in_environment() { 1 } else { 0 }));
+    
+    let deps: Vec<PlistValue> = target.dependencies()
+        .iter()
+        .map(|h| PlistValue::String(h.to_string()))
+        .collect();
+    dict.insert("dependencies".to_string(), PlistValue::Array(deps));
+}
+
+fn serialize_version_group(group: &XCVersionGroup, dict: &mut IndexMap<String, PlistValue>) {
+    dict.insert("path".to_string(), PlistValue::String(group.path().to_string()));
+    dict.insert("sourceTree".to_string(), PlistValue::String(group.source_tree().to_string()));
+    
+    let children: Vec<PlistValue> = group.children()
+        .iter()
+        .map(|h| PlistValue::String(h.to_string()))
+        .collect();
+    dict.insert("children".to_string(), PlistValue::Array(children));
+    
+    if let Some(current) = group.current_version() {
+        dict.insert("currentVersion".to_string(), PlistValue::String(current.to_string()));
+    }
+    
+    dict.insert("versionGroupType".to_string(), PlistValue::String(group.version_group_type().to_string()));
 }
