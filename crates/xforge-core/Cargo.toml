@@ -1,0 +1,13 @@
+[package]
+name = "xforge-core"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+thiserror.workspace = true
+serde.workspace = true
+once_cell.workspace = true
+indexmap.workspace = true
