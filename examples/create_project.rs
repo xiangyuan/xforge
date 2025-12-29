@@ -2,46 +2,42 @@
 
 use xforge::prelude::*;
 
-fn main() -> Result<()> {
-    println!("Creating a new Xcode project...");
+fn main() -> anyhow::Result<()> {
+    println!("🔨 Creating a new Xcode project...\n");
     
-    // Create a new project
-    let mut project = Project::builder()
-        .name("MyApp")
+    // Create a new project with builder pattern
+    let project = ProjectBuilder::new()
+        .name("MyAwesomeApp")
         .organization("MyCompany")
+        .development_region("en")
         .build();
     
-    println!("Project '{}' created successfully!", project.name());
+    println!("✅ Project created successfully!");
+    println!("   Name: {}", project.name());
+    println!("   Path: {}", project.path().display());
+    println!("   Organization: {:?}", project.metadata().organization);
+    println!("   Development Region: {}", project.metadata().development_region);
+    println!("   Archive Version: {}", project.metadata().archive_version);
+    println!("   Object Version: {}", project.metadata().object_version);
     
-    // Add an iOS application target
-    let app_target = project.add_target()
-        .name("MyApp")
-        .product_type(ProductType::Application)
-        .platform(Platform::iOS)
-        .build()?;
+    println!("\n🎯 Platforms available:");
+    println!("   - iOS: {}", Platform::iOS.as_str());
+    println!("   - macOS: {}", Platform::macOS.as_str());
+    println!("   - tvOS: {}", Platform::tvOS.as_str());
+    println!("   - watchOS: {}", Platform::watchOS.as_str());
+    println!("   - visionOS: {}", Platform::visionOS.as_str());
     
-    println!("Added target: MyApp");
+    println!("\n📦 Product types available:");
+    println!("   - Application: {}", ProductType::Application.as_str());
+    println!("   - Framework: {}", ProductType::Framework.as_str());
+    println!("   - Static Library: {}", ProductType::StaticLibrary.as_str());
     
-    // Add source files
-    project.add_file("Sources/AppDelegate.swift")
-        .to_target(&app_target)
-        .build()?;
-    
-    project.add_file("Sources/SceneDelegate.swift")
-        .to_target(&app_target)
-        .build()?;
-    
-    project.add_file("Sources/ViewController.swift")
-        .to_target(&app_target)
-        .build()?;
-    
-    println!("Added source files");
-    
-    // Save the project
+    println!("\n💾 Saving project...");
     project.save()?;
     
-    println!("Project saved to: {:?}", project.path());
-    println!("✅ Done!");
+    println!("\n🎉 Done! Project structure:");
+    println!("   {}/", project.name());
+    println!("   └── project.pbxproj (to be implemented)");
     
     Ok(())
 }
