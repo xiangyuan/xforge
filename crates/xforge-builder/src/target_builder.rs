@@ -65,7 +65,7 @@ mod tests {
     fn test_target_builder_basic() {
         let target = TargetBuilder::new("MyApp").build();
         
-        assert_eq!(target.name().unwrap(), "MyApp");
+        assert_eq!(target.name(), "MyApp");
     }
 
     #[test]
@@ -76,7 +76,7 @@ mod tests {
             .product_name("MyApp.app")
             .build();
         
-        assert_eq!(target.name().unwrap(), "MyApp");
+        assert_eq!(target.name(), "MyApp");
         assert_eq!(target.product_name.as_deref(), Some("MyApp.app"));
     }
 
@@ -88,7 +88,7 @@ mod tests {
             .product_name("MyFramework.framework")
             .build();
         
-        assert_eq!(target.name().unwrap(), "MyFramework");
+        assert_eq!(target.name(), "MyFramework");
         assert_eq!(target.product_type(), Some(ProductType::Framework));
     }
 }
