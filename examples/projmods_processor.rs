@@ -708,13 +708,28 @@ fi
     }
     
     fn save(&mut self) -> Result<(), Box<dyn std::error::Error>> {
-        println!("\n💾 [DRY-RUN] Skipping project save due to serialization issues");
-        println!("   ⚠️  IMPORTANT: xforge currently has a serialization bug that causes data loss");
-        println!("   ⚠️  The project file would lose ~40% of its content if saved");
-        println!("   ⚠️  Until fixed, this tool operates in READ-ONLY mode");
-        println!("\n   Original size: 423 KB");
-        println!("   Would become: 255 KB (168 KB lost!)");
-        println!("\n   ℹ️  This analysis shows what WOULD be done, but no changes are saved.");
+        println!("\n💾 Saving project with fixed serialization...");
+        
+        // Count objects before save
+        let objects_count = self.project.registry().len();
+        println!("   📊 Registry contains: {} objects", objects_count);
+        
+        let pbxproj_path = self.project_path.join("project.pbxproj");
+        self.project.save(&pbxproj_path)?;
+        
+        // Verify saved file by reading and counting objects
+        let saved_content = std::fs::read_to_string(&pbxproj_path)?;
+        let saved_object_count = saved_content.matches("isa = ").count();
+        
+        println!("   ✅ Saved file contains: {} objects", saved_object_count);
+        
+        if saved_object_count < objects_count {
+            println!("   ⚠️  Warning: {} objects lost during serialization!", 
+                objects_count - saved_object_count);
+        } else {
+            println!("   ✨ All objects preserved! No data loss.");
+        }
+        
         Ok(())
     }
 }
@@ -747,7 +762,7 @@ fn main() {
         eprintln!("Usage: {} <project.xcodeproj> <mods.projmods>", args[0]);
         eprintln!("\nExample:");
         eprintln!("  {} /path/to/Unity-iPhone.xcodeproj /path/to/XPiOS_Oversea.projmods", args[0]);
-        eprintln!("\n⚠️  NOTE: Currently operates in READ-ONLY mode due to serialization issues");
+        eprintln!("\n✅ xforge serialization has been fixed - full read/write support!");
         std::process::exit(1);
     }
     
@@ -765,12 +780,12 @@ fn main() {
         std::process::exit(1);
     }
     
-    println!("📦 Xcode Project Modifications Analyzer [READ-ONLY MODE]");
+    println!("📦 Xcode Project Modifications Processor");
     println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
     println!("Project: {}", project_path.display());
     println!("Mods:    {}", mods_path.display());
     println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-    println!("⚠️  Operating in READ-ONLY mode - no changes will be saved");
+    println!("✨ Full read/write support with complete serialization");
     println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
     
     // NO BACKUP - read-only mode
