@@ -13,6 +13,7 @@ use crate::{
         PBXFileSystemSynchronizedRootGroup,
     },
     pbx_group::PBXGroup,
+    pbx_variant_group::PBXVariantGroup,
     pbx_build_configuration::{XCBuildConfiguration, XCConfigurationList},
     pbx_build_phase::{
         PBXSourcesBuildPhase, PBXFrameworksBuildPhase, PBXResourcesBuildPhase,
@@ -69,6 +70,11 @@ pub fn deserialize_registry(plist: &PlistValue) -> Result<(Registry, ObjectId), 
                     "PBXGroup" => {
                         if let Ok(group) = deserialize_group(obj_dict) {
                             registry.register_with_id(obj_id, group);
+                        }
+                    }
+                    "PBXVariantGroup" => {
+                        if let Ok(variant_group) = deserialize_variant_group(obj_dict) {
+                            registry.register_with_id(obj_id, variant_group);
                         }
                     }
                     "XCBuildConfiguration" => {
@@ -233,6 +239,34 @@ fn deserialize_group(dict: &IndexMap<String, PlistValue>) -> Result<PBXGroup, St
     group.source_tree = source_tree.unwrap_or("<group>".to_string());
     group.children = children;
     Ok(group)
+}
+
+fn deserialize_variant_group(dict: &IndexMap<String, PlistValue>) -> Result<PBXVariantGroup, String> {
+    let name = dict.get("name")
+        .and_then(|v| v.as_string())
+        .map(|s| s.to_string());
+    
+    let source_tree = dict.get("sourceTree")
+        .and_then(|v| v.as_string())
+        .map(|s| s.to_string());
+    
+    let mut children = Vec::new();
+    
+    // Deserialize children (file references for localized variants)
+    if let Some(children_array) = dict.get("children").and_then(|v| v.as_array()) {
+        for child_id_val in children_array {
+            if let Some(id_str) = child_id_val.as_string() {
+                if let Ok(child_id) = ObjectId::from_uuid_string(id_str) {
+                    children.push(Handle::from_id(child_id));
+                }
+            }
+        }
+    }
+    
+    let mut variant_group = PBXVariantGroup::new(name.unwrap_or_default());
+    variant_group.source_tree = source_tree.unwrap_or("<group>".to_string());
+    variant_group.children = children;
+    Ok(variant_group)
 }
 
 fn deserialize_build_configuration(dict: &IndexMap<String, PlistValue>) -> Result<XCBuildConfiguration, String> {
