@@ -16,7 +16,7 @@ use crate::{
     pbx_build_configuration::{XCBuildConfiguration, XCConfigurationList},
     pbx_build_phase::{
         PBXSourcesBuildPhase, PBXFrameworksBuildPhase, PBXResourcesBuildPhase,
-        PBXShellScriptBuildPhase, PBXCopyFilesBuildPhase, PBXBuildFile,
+        PBXShellScriptBuildPhase, PBXCopyFilesBuildPhase, PBXHeadersBuildPhase, PBXBuildFile,
     },
     pbx_target_dependency::PBXTargetDependency,
     pbx_container_item_proxy::PBXContainerItemProxy,
@@ -103,6 +103,11 @@ pub fn deserialize_registry(plist: &PlistValue) -> Result<(Registry, ObjectId), 
                     }
                     "PBXCopyFilesBuildPhase" => {
                         if let Ok(phase) = deserialize_copy_files_build_phase(obj_dict) {
+                            registry.register_with_id(obj_id, phase);
+                        }
+                    }
+                    "PBXHeadersBuildPhase" => {
+                        if let Ok(phase) = deserialize_headers_build_phase(obj_dict) {
                             registry.register_with_id(obj_id, phase);
                         }
                     }
@@ -397,6 +402,34 @@ fn deserialize_copy_files_build_phase(dict: &IndexMap<String, PlistValue>) -> Re
     let mut phase = PBXCopyFilesBuildPhase::new(dst_path, dst_subfolder_spec);
     phase.files = files;
     phase.name = name;
+    Ok(phase)
+}
+
+fn deserialize_headers_build_phase(dict: &IndexMap<String, PlistValue>) -> Result<PBXHeadersBuildPhase, String> {
+    let mut files = Vec::new();
+    
+    if let Some(files_array) = dict.get("files").and_then(|v| v.as_array()) {
+        for file_id_val in files_array {
+            if let Some(id_str) = file_id_val.as_string() {
+                if let Ok(file_id) = ObjectId::from_uuid_string(id_str) {
+                    files.push(Handle::from_id(file_id));
+                }
+            }
+        }
+    }
+    
+    let build_action_mask = dict.get("buildActionMask")
+        .and_then(|v| v.as_integer())
+        .unwrap_or(2147483647) as u32;
+    let run_only_for_deployment_postprocessing = dict.get("runOnlyForDeploymentPostprocessing")
+        .and_then(|v| v.as_integer())
+        .map(|i| i != 0)
+        .unwrap_or(false);
+    
+    let mut phase = PBXHeadersBuildPhase::new();
+    phase.files = files;
+    phase.build_action_mask = build_action_mask;
+    phase.run_only_for_deployment_postprocessing = run_only_for_deployment_postprocessing;
     Ok(phase)
 }
 

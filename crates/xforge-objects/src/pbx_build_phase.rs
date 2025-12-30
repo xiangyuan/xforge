@@ -322,4 +322,51 @@ mod tests {
         assert_eq!(phase.isa(), "PBXCopyFilesBuildPhase");
         assert_eq!(phase.dst_subfolder_spec, 16);
     }
+    
+    #[test]
+    fn test_headers_phase() {
+        let phase = PBXHeadersBuildPhase::new();
+        assert_eq!(phase.isa(), "PBXHeadersBuildPhase");
+        assert_eq!(phase.files.len(), 0);
+    }
+}
+
+/// Headers build phase
+#[derive(Debug, Clone)]
+pub struct PBXHeadersBuildPhase {
+    id: ObjectId,
+    pub files: Vec<Handle<PBXBuildFile>>,
+    pub build_action_mask: u32,
+    pub run_only_for_deployment_postprocessing: bool,
+}
+
+impl PBXHeadersBuildPhase {
+    pub fn new() -> Self {
+        Self {
+            id: ObjectId::generate(),
+            files: Vec::new(),
+            build_action_mask: 2147483647,
+            run_only_for_deployment_postprocessing: false,
+        }
+    }
+}
+
+impl Default for PBXHeadersBuildPhase {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl PBXObject for PBXHeadersBuildPhase {
+    fn isa(&self) -> &'static str {
+        "PBXHeadersBuildPhase"
+    }
+
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+    
+    fn as_any_mut(&mut self) -> &mut dyn std::any::Any {
+        self
+    }
 }

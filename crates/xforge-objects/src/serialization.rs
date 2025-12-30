@@ -13,7 +13,7 @@ use crate::{
     pbx_build_configuration::{XCBuildConfiguration, XCConfigurationList},
     pbx_build_phase::{
         PBXSourcesBuildPhase, PBXFrameworksBuildPhase, PBXResourcesBuildPhase,
-        PBXShellScriptBuildPhase, PBXCopyFilesBuildPhase, PBXBuildFile,
+        PBXShellScriptBuildPhase, PBXCopyFilesBuildPhase, PBXHeadersBuildPhase, PBXBuildFile,
     },
     pbx_container_item_proxy::PBXContainerItemProxy,
     pbx_file_system_synchronized::{
@@ -92,6 +92,8 @@ fn serialize_object(obj: &dyn PBXObject, _registry: &Registry) -> Option<PlistVa
         serialize_shell_script_phase(shell, &mut dict);
     } else if let Some(copy) = any_obj.downcast_ref::<PBXCopyFilesBuildPhase>() {
         serialize_copy_files_phase(copy, &mut dict);
+    } else if let Some(headers) = any_obj.downcast_ref::<PBXHeadersBuildPhase>() {
+        serialize_headers_phase(headers, &mut dict);
     } else if let Some(build_file) = any_obj.downcast_ref::<PBXBuildFile>() {
         serialize_build_file(build_file, &mut dict);
     } else if let Some(proxy) = any_obj.downcast_ref::<PBXContainerItemProxy>() {
@@ -267,6 +269,15 @@ fn serialize_copy_files_phase(copy: &PBXCopyFilesBuildPhase, dict: &mut IndexMap
     
     dict.insert("dstSubfolderSpec".to_string(), PlistValue::Integer(copy.dst_subfolder_spec as i64));
     dict.insert("dstPath".to_string(), PlistValue::String(copy.dst_path.clone()));
+}
+
+fn serialize_headers_phase(headers: &PBXHeadersBuildPhase, dict: &mut IndexMap<String, PlistValue>) {
+    serialize_build_phase_common(
+        &headers.files,
+        headers.build_action_mask,
+        headers.run_only_for_deployment_postprocessing,
+        dict
+    );
 }
 
 fn serialize_build_file(build_file: &PBXBuildFile, dict: &mut IndexMap<String, PlistValue>) {

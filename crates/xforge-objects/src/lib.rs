@@ -36,6 +36,7 @@ pub use pbx_build_phase::{
     PBXResourcesBuildPhase,
     PBXShellScriptBuildPhase,
     PBXCopyFilesBuildPhase,
+    PBXHeadersBuildPhase,
     PBXBuildFile,
 };
 pub use pbx_container_item_proxy::PBXContainerItemProxy;

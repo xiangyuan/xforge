@@ -345,6 +345,158 @@ impl Project {
             Err("Configuration not found".to_string())
         }
     }
+    
+    /// Add a framework with optional weak/optional attributes
+    /// Example: add_framework("CoreGraphics.framework", target, vec!["Weak"])
+    pub fn add_framework(
+        &mut self,
+        framework_name: &str,
+        target: xforge_core::Handle<xforge_objects::PBXNativeTarget>,
+        attributes: Vec<String>,
+    ) -> Result<xforge_core::Handle<xforge_objects::PBXFileReference>, String> {
+        use xforge_objects::{PBXBuildFile, PBXFrameworksBuildPhase};
+        
+        // Add framework file reference
+        let framework_path = format!("System/Library/Frameworks/{}", framework_name);
+        let file_ref = self.add_file(&framework_path, Some("SDKROOT".to_string()))?;
+        
+        // Get target's frameworks build phase
+        let target_obj = self.registry.get::<xforge_objects::PBXNativeTarget>(target.id())
+            .ok_or("Target not found")?;
+        
+        let frameworks_phase_id = target_obj.build_phases.iter()
+            .find(|phase_id| {
+                self.registry.get::<PBXFrameworksBuildPhase>(phase_id).is_some()
+            })
+            .ok_or("Frameworks build phase not found")?
+            .clone(); // Clone to avoid borrow conflict
+        
+        // Create build file with attributes
+        let mut build_file = PBXBuildFile::new(file_ref.clone());
+        if !attributes.is_empty() {
+            let mut settings = std::collections::HashMap::new();
+            settings.insert("ATTRIBUTES".to_string(), attributes.join(","));
+            build_file.settings = Some(settings);
+        }
+        
+        let build_file_handle = self.registry.register(build_file);
+        
+        // Add to frameworks build phase
+        if let Some(phase) = self.registry.get_mut::<PBXFrameworksBuildPhase>(&frameworks_phase_id) {
+            phase.files.push(build_file_handle);
+        }
+        
+        Ok(file_ref)
+    }
+    
+    /// Add a system framework (convenience method)
+    pub fn add_system_framework(
+        &mut self,
+        framework_name: &str,
+        target: xforge_core::Handle<xforge_objects::PBXNativeTarget>,
+    ) -> Result<xforge_core::Handle<xforge_objects::PBXFileReference>, String> {
+        self.add_framework(framework_name, target, vec![])
+    }
+    
+    /// Add a weak framework
+    pub fn add_weak_framework(
+        &mut self,
+        framework_name: &str,
+        target: xforge_core::Handle<xforge_objects::PBXNativeTarget>,
+    ) -> Result<xforge_core::Handle<xforge_objects::PBXFileReference>, String> {
+        self.add_framework(framework_name, target, vec!["Weak".to_string()])
+    }
+    
+    /// Embed a framework with code signing
+    /// Finds or creates a "Embed Frameworks" copy files build phase
+    pub fn embed_framework(
+        &mut self,
+        framework_ref: xforge_core::Handle<xforge_objects::PBXFileReference>,
+        target: xforge_core::Handle<xforge_objects::PBXNativeTarget>,
+    ) -> Result<(), String> {
+        use xforge_objects::{PBXBuildFile, PBXCopyFilesBuildPhase};
+        
+        // Find or create Embed Frameworks phase
+        let embed_phase = self.get_or_create_embed_frameworks_phase(target.clone())?;
+        
+        // Create build file with code signing attributes
+        let mut build_file = PBXBuildFile::new(framework_ref);
+        let mut settings = std::collections::HashMap::new();
+        settings.insert("ATTRIBUTES".to_string(), "CodeSignOnCopy,RemoveHeadersOnCopy".to_string());
+        build_file.settings = Some(settings);
+        
+        let build_file_handle = self.registry.register(build_file);
+        
+        // Add to embed phase
+        if let Some(phase) = self.registry.get_mut::<PBXCopyFilesBuildPhase>(embed_phase.id()) {
+            phase.files.push(build_file_handle);
+        }
+        
+        Ok(())
+    }
+    
+    /// Get or create an "Embed Frameworks" copy files build phase
+    fn get_or_create_embed_frameworks_phase(
+        &mut self,
+        target: xforge_core::Handle<xforge_objects::PBXNativeTarget>,
+    ) -> Result<xforge_core::Handle<xforge_objects::PBXCopyFilesBuildPhase>, String> {
+        use xforge_objects::PBXCopyFilesBuildPhase;
+        
+        let target_obj = self.registry.get::<xforge_objects::PBXNativeTarget>(target.id())
+            .ok_or("Target not found")?;
+        
+        // Try to find existing Embed Frameworks phase
+        for phase_id in &target_obj.build_phases {
+            if let Some(copy_phase) = self.registry.get::<PBXCopyFilesBuildPhase>(phase_id) {
+                if copy_phase.name.as_deref() == Some("Embed Frameworks") {
+                    return Ok(xforge_core::Handle::from_id(phase_id.clone()));
+                }
+            }
+        }
+        
+        // Create new Embed Frameworks phase
+        let mut embed_phase = PBXCopyFilesBuildPhase::new("", 10); // Empty path, Frameworks destination
+        embed_phase.name = Some("Embed Frameworks".to_string());
+        
+        let handle = self.registry.register(embed_phase);
+        
+        // Add to target
+        if let Some(target_obj) = self.registry.get_mut::<xforge_objects::PBXNativeTarget>(target.id()) {
+            target_obj.build_phases.push(*handle.id());
+        }
+        
+        Ok(handle)
+    }
+    
+    /// Append to array build setting for a target's configurations
+    /// Example: append_to_target_setting("OTHER_LDFLAGS", "-ObjC", target)
+    pub fn append_to_target_setting(
+        &mut self,
+        key: &str,
+        value: &str,
+        target: xforge_core::Handle<xforge_objects::PBXNativeTarget>,
+    ) -> Result<(), String> {
+        let target_obj = self.registry.get::<xforge_objects::PBXNativeTarget>(target.id())
+            .ok_or("Target not found")?;
+        
+        let config_list_id = target_obj.build_configuration_list
+            .ok_or("Target has no configuration list")?;
+        
+        let config_list = self.registry.get::<xforge_objects::XCConfigurationList>(&config_list_id)
+            .ok_or("Configuration list not found")?;
+        
+        // Clone the handles to avoid borrow conflict
+        let config_handles: Vec<_> = config_list.build_configurations.iter().cloned().collect();
+        
+        // Update all configurations
+        for config_handle in config_handles {
+            if let Some(config) = self.registry.get_mut::<xforge_objects::XCBuildConfiguration>(config_handle.id()) {
+                config.append_to_array_setting(key, value);
+            }
+        }
+        
+        Ok(())
+    }
 }
 
 #[cfg(test)]
