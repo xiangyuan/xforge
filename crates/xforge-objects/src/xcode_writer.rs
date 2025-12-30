@@ -1,0 +1,412 @@
+//! Xcode-specific serialization with proper formatting
+//!
+//! This module generates Xcode project files with:
+//! - Section comments (/* Begin PBXBuildFile section */)
+//! - Object name comments (uuid /* name */)  
+//! - Proper field ordering (isa always first)
+//! - UUID reference comments
+
+use crate::*;
+use xforge_core::{Registry, PBXObject};
+use xforge_serialization::PlistValue;
+use indexmap::IndexMap;
+use std::collections::HashMap;
+
+/// Write a complete Xcode project file with proper formatting
+pub fn write_xcode_project(registry: &Registry, root_id: &str) -> Result<String, String> {
+    let mut output = String::new();
+    
+    // 1. UTF-8 magic marker (REQUIRED by Xcode)
+    output.push_str("// !$*UTF8*$!\n");
+    
+    // 2. Root dictionary opening
+    output.push_str("{\n");
+    
+    // 3. Archive version
+    output.push_str("\tarchiveVersion = 1;\n");
+    
+    // 4. Empty classes
+    output.push_str("\tclasses = {\n");
+    output.push_str("\t};\n");
+    
+    // 5. Object version  
+    output.push_str("\tobjectVersion = 56;\n");
+    
+    // 6. Objects section with grouping
+    output.push_str("\tobjects = {\n");
+    output.push_str("\n");
+    
+    write_objects_with_sections(&mut output, registry)?;
+    
+    output.push_str("\t};\n");
+    
+    // 7. Root object with comment
+    if let Some(obj) = registry.get(root_id) {
+        if let Some(comment) = get_object_comment(obj.as_ref(), registry) {
+            output.push_str(&format!("\trootObject = {} /* {} */;\n", root_id, comment));
+        } else {
+            output.push_str(&format!("\trootObject = {};\n", root_id));
+        }
+    } else {
+        output.push_str(&format!("\trootObject = {};\n", root_id));
+    }
+    
+    // 8. Close root dictionary
+    output.push_str("}\n");
+    
+    Ok(output)
+}
+
+/// Group objects by type and write with section comments
+fn write_objects_with_sections(output: &mut String, registry: &Registry) -> Result<(), String> {
+    // Group objects by ISA type
+    let mut grouped: HashMap<String, Vec<(String, &dyn PBXObject)>> = HashMap::new();
+    
+    for (id, obj) in registry.iter() {
+        let isa = obj.isa();
+        grouped.entry(isa.to_string())
+            .or_insert_with(Vec::new)
+            .push((id.clone(), obj.as_ref()));
+    }
+    
+    // Sort ISA types alphabetically
+    let mut isa_types: Vec<String> = grouped.keys().cloned().collect();
+    isa_types.sort();
+    
+    // Write each section
+    for isa in isa_types {
+        let mut objects_in_section = grouped.remove(&isa).unwrap();
+        
+        // Sort objects by ID within section
+        objects_in_section.sort_by(|a, b| a.0.cmp(&b.0));
+        
+        // Section header
+        output.push_str(&format!("/* Begin {} section */\n", isa));
+        
+        // Write each object
+        for (id, obj) in objects_in_section {
+            write_object(output, &id, obj, registry)?;
+        }
+        
+        // Section footer
+        output.push_str(&format!("/* End {} section */\n", isa));
+        output.push_str("\n");
+    }
+    
+    Ok(())
+}
+
+/// Write a single object with proper formatting
+fn write_object(output: &mut String, id: &str, obj: &dyn PBXObject, registry: &Registry) -> Result<(), String> {
+    let isa = obj.isa();
+    let comment = get_object_comment(obj, registry);
+    
+    // Determine if this object should be flat (single line)
+    let is_flat = matches!(isa, "PBXBuildFile" | "PBXFileReference");
+    
+    // Object opening with optional comment
+    if let Some(comment_text) = comment {
+        output.push_str(&format!("\t\t{} /* {} */ = {{", id, comment_text));
+    } else {
+        output.push_str(&format!("\t\t{} = {{", id));
+    }
+    
+    // Serialize object to dictionary
+    let obj_dict = serialize_object_to_dict(obj, registry)?;
+    
+    if is_flat {
+        write_dict_flat(output, &obj_dict, registry)?;
+        output.push_str(" };\n");
+    } else {
+        output.push_str("\n");
+        write_dict_multiline(output, &obj_dict, 3, registry)?;
+        output.push_str("\t\t};\n");
+    }
+    
+    Ok(())
+}
+
+/// Serialize an object to a dictionary (reusing existing serialization)
+fn serialize_object_to_dict(obj: &dyn PBXObject, registry: &Registry) -> Result<IndexMap<String, PlistValue>, String> {
+    use std::any::Any;
+    
+    let mut dict = IndexMap::new();
+    dict.insert("isa".to_string(), PlistValue::String(obj.isa().to_string()));
+    
+    let any_obj = obj as &dyn Any;
+    
+    // Use existing serialization functions
+    if let Some(project) = any_obj.downcast_ref::<PBXProject>() {
+        crate::serialization::serialize_project(project, &mut dict);
+    } else if let Some(target) = any_obj.downcast_ref::<PBXNativeTarget>() {
+        crate::serialization::serialize_target(target, &mut dict);
+    } else if let Some(file_ref) = any_obj.downcast_ref::<PBXFileReference>() {
+        crate::serialization::serialize_file_reference(file_ref, &mut dict);
+    } else if let Some(group) = any_obj.downcast_ref::<PBXGroup>() {
+        crate::serialization::serialize_group(group, &mut dict);
+    } else if let Some(config) = any_obj.downcast_ref::<XCBuildConfiguration>() {
+        crate::serialization::serialize_build_configuration(config, &mut dict);
+    } else if let Some(config_list) = any_obj.downcast_ref::<XCConfigurationList>() {
+        crate::serialization::serialize_configuration_list(config_list, &mut dict);
+    } else if let Some(sources) = any_obj.downcast_ref::<PBXSourcesBuildPhase>() {
+        crate::serialization::serialize_build_phase_common(&sources.files, sources.build_action_mask, sources.run_only_for_deployment_postprocessing, &mut dict);
+    } else if let Some(frameworks) = any_obj.downcast_ref::<PBXFrameworksBuildPhase>() {
+        crate::serialization::serialize_build_phase_common(&frameworks.files, frameworks.build_action_mask, frameworks.run_only_for_deployment_postprocessing, &mut dict);
+    } else if let Some(resources) = any_obj.downcast_ref::<PBXResourcesBuildPhase>() {
+        crate::serialization::serialize_build_phase_common(&resources.files, resources.build_action_mask, resources.run_only_for_deployment_postprocessing, &mut dict);
+    } else if let Some(shell) = any_obj.downcast_ref::<PBXShellScriptBuildPhase>() {
+        crate::serialization::serialize_shell_script_phase(shell, &mut dict);
+    } else if let Some(copy) = any_obj.downcast_ref::<PBXCopyFilesBuildPhase>() {
+        crate::serialization::serialize_copy_files_phase(copy, &mut dict);
+    } else if let Some(headers) = any_obj.downcast_ref::<PBXHeadersBuildPhase>() {
+        crate::serialization::serialize_headers_phase(headers, &mut dict);
+    } else if let Some(build_file) = any_obj.downcast_ref::<PBXBuildFile>() {
+        crate::serialization::serialize_build_file(build_file, &mut dict);
+    } else if let Some(proxy) = any_obj.downcast_ref::<PBXContainerItemProxy>() {
+        crate::serialization::serialize_container_item_proxy(proxy, &mut dict);
+    } else if let Some(dependency) = any_obj.downcast_ref::<PBXTargetDependency>() {
+        crate::serialization::serialize_target_dependency(dependency, &mut dict);
+    } else if let Some(variant_group) = any_obj.downcast_ref::<PBXVariantGroup>() {
+        crate::serialization::serialize_variant_group(variant_group, &mut dict);
+    } else if let Some(ref_proxy) = any_obj.downcast_ref::<PBXReferenceProxy>() {
+        crate::serialization::serialize_reference_proxy(ref_proxy, &mut dict);
+    }
+    
+    Ok(dict)
+}
+
+/// Write dictionary in flat format (single line)
+fn write_dict_flat(output: &mut String, dict: &IndexMap<String, PlistValue>, registry: &Registry) -> Result<(), String> {
+    // isa always first
+    let mut keys: Vec<&String> = dict.keys().collect();
+    keys.sort_by(|a, b| {
+        if **a == "isa" {
+            std::cmp::Ordering::Less
+        } else if **b == "isa" {
+            std::cmp::Ordering::Greater
+        } else {
+            a.cmp(b)
+        }
+    });
+    
+    for (i, key) in keys.iter().enumerate() {
+        let value = dict.get(*key).unwrap();
+        
+        if needs_quotes(key) {
+            output.push_str(&format!("\"{}\" = ", key));
+        } else {
+            output.push_str(&format!("{} = ", key));
+        }
+        
+        write_value_flat(output, value, registry)?;
+        output.push_str(";");
+        
+        if i < keys.len() - 1 {
+            output.push_str(" ");
+        }
+    }
+    
+    Ok(())
+}
+
+/// Write dictionary in multiline format
+fn write_dict_multiline(output: &mut String, dict: &IndexMap<String, PlistValue>, indent: usize, registry: &Registry) -> Result<(), String> {
+    // isa always first
+    let mut keys: Vec<&String> = dict.keys().collect();
+    keys.sort_by(|a, b| {
+        if **a == "isa" {
+            std::cmp::Ordering::Less
+        } else if **b == "isa" {
+            std::cmp::Ordering::Greater
+        } else {
+            a.cmp(b)
+        }
+    });
+    
+    for key in keys {
+        let value = dict.get(key).unwrap();
+        
+        // Indent
+        for _ in 0..indent {
+            output.push('\t');
+        }
+        
+        if needs_quotes(key) {
+            output.push_str(&format!("\"{}\" = ", key));
+        } else {
+            output.push_str(&format!("{} = ", key));
+        }
+        
+        write_value_multiline(output, value, indent, registry)?;
+        output.push_str(";\n");
+    }
+    
+    Ok(())
+}
+
+/// Write value in flat format
+fn write_value_flat(output: &mut String, value: &PlistValue, registry: &Registry) -> Result<(), String> {
+    match value {
+        PlistValue::String(s) => {
+            if is_uuid(s) {
+                if let Some(comment) = get_uuid_comment(s, registry) {
+                    output.push_str(&format!("{} /* {} */", s, comment));
+                } else if needs_quotes(s) {
+                    output.push_str(&format!("\"{}\"", escape_string(s)));
+                } else {
+                    output.push_str(s);
+                }
+            } else if needs_quotes(s) {
+                output.push_str(&format!("\"{}\"", escape_string(s)));
+            } else {
+                output.push_str(s);
+            }
+        }
+        PlistValue::Integer(i) => output.push_str(&i.to_string()),
+        PlistValue::Real(f) => output.push_str(&f.to_string()),
+        PlistValue::Boolean(b) => output.push_str(if *b { "YES" } else { "NO" }),
+        PlistValue::Array(arr) => {
+            output.push_str("(");
+            for (i, item) in arr.iter().enumerate() {
+                write_value_flat(output, item, registry)?;
+                output.push_str(",");
+                if i < arr.len() - 1 {
+                    output.push_str(" ");
+                }
+            }
+            output.push_str(")");
+        }
+        PlistValue::Dictionary(dict) => {
+            output.push_str("{");
+            let mut first = true;
+            for (k, v) in dict {
+                if !first {
+                    output.push_str(" ");
+                }
+                first = false;
+                output.push_str(&format!("{} = ", k));
+                write_value_flat(output, v, registry)?;
+                output.push_str(";");
+            }
+            output.push_str("}");
+        }
+        _ => {}
+    }
+    Ok(())
+}
+
+/// Write value in multiline format
+fn write_value_multiline(output: &mut String, value: &PlistValue, indent: usize, registry: &Registry) -> Result<(), String> {
+    match value {
+        PlistValue::String(s) => {
+            if is_uuid(s) {
+                if let Some(comment) = get_uuid_comment(s, registry) {
+                    output.push_str(&format!("{} /* {} */", s, comment));
+                } else if needs_quotes(s) {
+                    output.push_str(&format!("\"{}\"", escape_string(s)));
+                } else {
+                    output.push_str(s);
+                }
+            } else if needs_quotes(s) {
+                output.push_str(&format!("\"{}\"", escape_string(s)));
+            } else {
+                output.push_str(s);
+            }
+        }
+        PlistValue::Integer(i) => output.push_str(&i.to_string()),
+        PlistValue::Real(f) => output.push_str(&f.to_string()),
+        PlistValue::Boolean(b) => output.push_str(if *b { "YES" } else { "NO" }),
+        PlistValue::Array(arr) => {
+            output.push_str("(\n");
+            for item in arr {
+                for _ in 0..=indent {
+                    output.push('\t');
+                }
+                write_value_multiline(output, item, indent + 1, registry)?;
+                output.push_str(",\n");
+            }
+            for _ in 0..indent {
+                output.push('\t');
+            }
+            output.push_str(")");
+        }
+        PlistValue::Dictionary(dict) => {
+            output.push_str("{\n");
+            write_dict_multiline(output, dict, indent + 1, registry)?;
+            for _ in 0..indent {
+                output.push('\t');
+            }
+            output.push_str("}");
+        }
+        _ => {}
+    }
+    Ok(())
+}
+
+/// Get a comment for an object
+fn get_object_comment(obj: &dyn PBXObject, registry: &Registry) -> Option<String> {
+    use std::any::Any;
+    let any_obj = obj as &dyn Any;
+    
+    if let Some(fr) = any_obj.downcast_ref::<PBXFileReference>() {
+        return fr.name.clone().or_else(|| fr.path.clone());
+    } else if let Some(target) = any_obj.downcast_ref::<PBXNativeTarget>() {
+        return Some(target.name.clone());
+    } else if let Some(group) = any_obj.downcast_ref::<PBXGroup>() {
+        return group.name.clone().or_else(|| group.path.clone());
+    } else if let Some(config) = any_obj.downcast_ref::<XCBuildConfiguration>() {
+        return Some(config.name.clone());
+    } else if let Some(_) = any_obj.downcast_ref::<PBXSourcesBuildPhase>() {
+        return Some("Sources".to_string());
+    } else if let Some(_) = any_obj.downcast_ref::<PBXFrameworksBuildPhase>() {
+        return Some("Frameworks".to_string());
+    } else if let Some(_) = any_obj.downcast_ref::<PBXResourcesBuildPhase>() {
+        return Some("Resources".to_string());
+    } else if let Some(_) = any_obj.downcast_ref::<PBXHeadersBuildPhase>() {
+        return Some("Headers".to_string());
+    } else if let Some(copy) = any_obj.downcast_ref::<PBXCopyFilesBuildPhase>() {
+        return copy.name.clone().or_else(|| Some("Embed Frameworks".to_string()));
+    } else if let Some(shell) = any_obj.downcast_ref::<PBXShellScriptBuildPhase>() {
+        return shell.name.clone().or_else(|| Some("ShellScript".to_string()));
+    } else if let Some(variant) = any_obj.downcast_ref::<PBXVariantGroup>() {
+        return variant.name.clone();
+    } else if let Some(proxy) = any_obj.downcast_ref::<PBXContainerItemProxy>() {
+        return proxy.remote_info.clone();
+    }
+    
+    None
+}
+
+/// Get comment for a UUID reference
+fn get_uuid_comment(uuid: &str, registry: &Registry) -> Option<String> {
+    registry.get(uuid).and_then(|obj| get_object_comment(obj.as_ref(), registry))
+}
+
+/// Check if string is a UUID (24 hex characters)
+fn is_uuid(s: &str) -> bool {
+    s.len() == 24 && s.chars().all(|c| c.is_ascii_hexdigit())
+}
+
+/// Check if a string needs quotes
+fn needs_quotes(s: &str) -> bool {
+    if s.is_empty() {
+        return true;
+    }
+    
+    if s.starts_with("___") {
+        return true;
+    }
+    
+    s.chars().any(|c| {
+        !c.is_ascii_alphanumeric() && c != '_' && c != '.' && c != '$' && c != '/'
+    })
+}
+
+/// Escape special characters
+fn escape_string(s: &str) -> String {
+    s.replace('\\', "\\\\")
+        .replace('"', "\\\"")
+        .replace('\n', "\\n")
+        .replace('\r', "\\r")
+        .replace('\t', "\\t")
+}

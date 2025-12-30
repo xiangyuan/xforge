@@ -17,6 +17,7 @@ pub mod xc_swift_package;
 pub mod xc_version_group;
 pub mod serialization;
 pub mod deserialization;
+pub mod xcode_writer;
 
 pub use pbx_project::{PBXProject, ProjectReference};
 pub use pbx_target::PBXNativeTarget;
