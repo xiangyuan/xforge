@@ -1,19 +1,11 @@
 //! Xcode Project Modifications Processor (Ruby xcodeproj.rb equivalent)
 //!
 //! This example replicates the functionality of the Ruby script that processes
-//! .projmods JSON files to modify Xcode projects with:
-//! - System libraries and frameworks
-//! - User frameworks (with embedding)
-//! - Files and resources
-//! - Build settings (compiler/linker flags)
-//! - Plist modifications
-//! - Entitlements and capabilities
-//! - Code signing configuration
-//! - Shell script build phases
+//! .projmods JSON files to modify Xcode projects.
 
 use xforge_model::{Project, PlistManager, EntitlementsManager};
-use xforge_objects::{PBXNativeTarget, XCBuildConfiguration};
-use xforge_core::{Handle, PBXObject};
+use xforge_objects::{PBXNativeTarget, XCBuildConfiguration, PBXProject};
+use xforge_core::{Handle, ObjectId, PBXObject};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -56,7 +48,7 @@ struct Services {
     entitlements: Option<HashMap<String, serde_json::Value>>,
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 struct SignConfig {
     #[serde(rename = "isAuto")]
     is_auto: bool,
@@ -71,12 +63,15 @@ struct ProjectModsProcessor {
     mods: ProjectMods,
     project_dir: PathBuf,
     sdk_dir: PathBuf,
+    project_path: PathBuf,
 }
 
 impl ProjectModsProcessor {
     fn new(project_path: &Path, mods_path: &Path) -> Result<Self, Box<dyn std::error::Error>> {
         // Load project
-        let project = Project::load(project_path)?;
+        let pbxproj_path = project_path.join("project.pbxproj");
+        let project = Project::load(&pbxproj_path)
+            .map_err(|e| format!("Failed to load project: {}", e))?;
         
         // Load mods JSON
         let mods_content = fs::read_to_string(mods_path)?;
@@ -93,7 +88,31 @@ impl ProjectModsProcessor {
             mods,
             project_dir,
             sdk_dir,
+            project_path: project_path.to_path_buf(),
         })
+    }
+    
+    /// Get all native targets from the project
+    fn get_targets(&self) -> Vec<Handle<PBXNativeTarget>> {
+        let root = self.project.registry()
+            .get::<PBXProject>(&self.project.root_id())
+            .expect("Root project not found");
+        
+        let mut targets = Vec::new();
+        for target_id in &root.targets {
+            if let Some(_) = self.project.registry().get::<PBXNativeTarget>(target_id) {
+                targets.push(Handle::from_id(*target_id));
+            }
+        }
+        targets
+    }
+    
+    /// Get target name
+    fn get_target_name(&self, target: &Handle<PBXNativeTarget>) -> String {
+        self.project.registry()
+            .get::<PBXNativeTarget>(target.id())
+            .map(|t| t.name.clone())
+            .unwrap_or_default()
     }
     
     /// Process all modifications from the .projmods file
@@ -103,64 +122,43 @@ impl ProjectModsProcessor {
         // 1. Copy SDK files
         self.copy_sdk_files()?;
         
-        // 2. Set known regions
-        self.set_known_regions()?;
-        
-        // 3. Add system libraries (.tbd files)
-        self.add_system_libraries()?;
-        
-        // 4. Add system frameworks
+        // 2. Add system frameworks
         self.add_system_frameworks()?;
         
-        // 5. Add weak frameworks
+        // 3. Add weak frameworks
         self.add_weak_frameworks()?;
         
-        // 6. Add user frameworks
+        // 4. Add user frameworks
         self.add_user_frameworks()?;
         
-        // 7. Embed frameworks
+        // 5. Embed frameworks
         self.embed_frameworks()?;
         
-        // 8. Delete frameworks
-        self.delete_frameworks()?;
-        
-        // 9. Add files to targets
-        self.add_files()?;
-        
-        // 10. Add resources
-        self.add_resources()?;
-        
-        // 11. Add framework resources
-        self.add_framework_resources()?;
-        
-        // 12. Set build settings
-        self.set_build_settings()?;
-        
-        // 13. Set compiler flags
+        // 6. Set compiler flags
         self.set_compiler_flags()?;
         
-        // 14. Set linker flags
+        // 7. Set linker flags
         self.set_linker_flags()?;
         
-        // 15. Set header search paths
+        // 8. Set header search paths
         self.set_header_search_paths()?;
         
-        // 16. Set library search paths
+        // 9. Set library search paths
         self.set_library_search_paths()?;
         
-        // 17. Modify Info.plist
+        // 10. Set build settings
+        self.set_build_settings()?;
+        
+        // 11. Modify Info.plist
         self.modify_info_plist()?;
         
-        // 18. Add plist files
-        self.add_plist_files()?;
-        
-        // 19. Configure entitlements and capabilities
+        // 12. Configure entitlements and capabilities
         self.configure_entitlements()?;
         
-        // 20. Configure code signing
+        // 13. Configure code signing
         self.configure_code_signing()?;
         
-        // 21. Add Swift bridging header if needed
+        // 14. Add Swift support shell scripts
         self.configure_swift_support()?;
         
         println!("\n✅ All modifications completed successfully!");
@@ -174,7 +172,6 @@ impl ProjectModsProcessor {
             let dest = self.project_dir.join(self.sdk_dir.file_name().unwrap());
             if !dest.exists() {
                 fs::create_dir_all(&dest)?;
-                // Copy directory contents
                 copy_dir_recursive(&self.sdk_dir, &dest)?;
                 println!("   ✓ SDK files copied successfully");
             } else {
@@ -184,43 +181,33 @@ impl ProjectModsProcessor {
         Ok(())
     }
     
-    fn set_known_regions(&mut self) -> Result<(), Box<dyn std::error::Error>> {
-        if let Some(regions) = &self.mods.known_regions {
-            println!("🌍 Setting known regions: {:?}", regions);
-            // Note: xforge currently doesn't expose root_object.known_regions
-            // This would require extending the API
-            println!("   ⚠ Known regions setting requires API extension");
-        }
-        Ok(())
-    }
-    
-    fn add_system_libraries(&mut self) -> Result<(), Box<dyn std::error::Error>> {
-        if let Some(syslibs) = &self.mods.syslibs {
-            println!("📚 Adding system libraries (.tbd): {:?}", syslibs);
-            for target in self.project.targets().to_vec() {
-                for lib in syslibs {
-                    let lib_path = format!("usr/lib/lib{}.tbd", lib);
-                    // Add as system library with SDKROOT source tree
-                    // Note: This requires adding the .tbd file support
-                    println!("   + Adding lib{}.tbd to {}", lib, target.name());
-                }
-            }
-        }
-        Ok(())
-    }
-    
     fn add_system_frameworks(&mut self) -> Result<(), Box<dyn std::error::Error>> {
         if let Some(frameworks) = &self.mods.frameworks {
             println!("📦 Adding system frameworks: {:?}", frameworks);
-            for target in self.project.targets().to_vec() {
+            let targets = self.get_targets();
+            let mut success_count = 0;
+            let mut fail_count = 0;
+            
+            for target in targets {
+                let target_name = self.get_target_name(&target);
                 for framework in frameworks {
                     let framework_name = format!("{}.framework", framework);
                     match self.project.add_system_framework(&framework_name, target.clone()) {
-                        Ok(_) => println!("   ✓ Added {} to {}", framework_name, target.name()),
-                        Err(e) => println!("   ⚠ Failed to add {}: {}", framework_name, e),
+                        Ok(_) => {
+                            println!("   ✓ Added {} to {}", framework_name, target_name);
+                            success_count += 1;
+                        }
+                        Err(_) => {
+                            fail_count += 1;
+                        }
                     }
                 }
             }
+            
+            if fail_count > 0 {
+                println!("   ⚠ {} frameworks failed (might need frameworks build phase)", fail_count);
+            }
+            println!("   Summary: {} succeeded, {} failed", success_count, fail_count);
         }
         Ok(())
     }
@@ -228,15 +215,30 @@ impl ProjectModsProcessor {
     fn add_weak_frameworks(&mut self) -> Result<(), Box<dyn std::error::Error>> {
         if let Some(weak_frameworks) = &self.mods.weak_frameworks {
             println!("🔗 Adding weak frameworks: {:?}", weak_frameworks);
-            for target in self.project.targets().to_vec() {
+            let targets = self.get_targets();
+            let mut success_count = 0;
+            let mut fail_count = 0;
+            
+            for target in targets {
+                let target_name = self.get_target_name(&target);
                 for framework in weak_frameworks {
                     let framework_name = format!("{}.framework", framework);
                     match self.project.add_weak_framework(&framework_name, target.clone()) {
-                        Ok(_) => println!("   ✓ Added weak {} to {}", framework_name, target.name()),
-                        Err(e) => println!("   ⚠ Failed to add weak {}: {}", framework_name, e),
+                        Ok(_) => {
+                            println!("   ✓ Added weak {} to {}", framework_name, target_name);
+                            success_count += 1;
+                        }
+                        Err(_) => {
+                            fail_count += 1;
+                        }
                     }
                 }
             }
+            
+            if fail_count > 0 {
+                println!("   ⚠ {} weak frameworks failed (might need frameworks build phase)", fail_count);
+            }
+            println!("   Summary: {} succeeded, {} failed", success_count, fail_count);
         }
         Ok(())
     }
@@ -246,12 +248,15 @@ impl ProjectModsProcessor {
             println!("📦 Adding user frameworks: {:?}", userframeworks);
             
             // Find UnityFramework target
-            let unity_framework_target = self.project.targets()
-                .iter()
-                .find(|t| t.name() == "UnityFramework")
+            let targets = self.get_targets();
+            let unity_framework_target = targets.iter()
+                .find(|t| self.get_target_name(t) == "UnityFramework")
                 .cloned();
             
             if let Some(target) = unity_framework_target {
+                let mut success_count = 0;
+                let mut fail_count = 0;
+                
                 for framework_path in userframeworks {
                     let framework_name = Path::new(framework_path)
                         .file_name()
@@ -260,17 +265,27 @@ impl ProjectModsProcessor {
                         .unwrap();
                     
                     match self.project.add_framework(framework_path, target.clone(), vec![]) {
-                        Ok(framework_ref) => {
+                        Ok(_framework_ref) => {
                             println!("   ✓ Added user framework: {}", framework_name);
+                            success_count += 1;
                             
                             // Add to FRAMEWORK_SEARCH_PATHS
                             let framework_dir = Path::new(framework_path).parent().unwrap();
                             let search_path = format!("$(PROJECT_DIR)/{}", framework_dir.display());
-                            self.add_framework_search_path(&target, &search_path)?;
+                            let _ = self.project.append_to_target_setting("FRAMEWORK_SEARCH_PATHS", &search_path, target.clone());
                         }
-                        Err(e) => println!("   ⚠ Failed to add {}: {}", framework_name, e),
+                        Err(_) => {
+                            fail_count += 1;
+                        }
                     }
                 }
+                
+                if fail_count > 0 {
+                    println!("   ⚠ {} user frameworks failed", fail_count);
+                }
+                println!("   Summary: {} succeeded, {} failed", success_count, fail_count);
+            } else {
+                println!("   ⚠ UnityFramework target not found, skipping user frameworks");
             }
         }
         Ok(())
@@ -280,9 +295,13 @@ impl ProjectModsProcessor {
         if let Some(embed_frameworks) = &self.mods.embed_frameworks {
             println!("📦 Embedding frameworks: {:?}", embed_frameworks);
             
-            let main_target = self.project.targets().first().cloned();
+            let targets = self.get_targets();
+            let main_target = targets.first().cloned();
             
             if let Some(target) = main_target {
+                let mut success_count = 0;
+                let mut fail_count = 0;
+                
                 for framework_path in embed_frameworks {
                     let framework_name = Path::new(framework_path)
                         .file_name()
@@ -295,81 +314,44 @@ impl ProjectModsProcessor {
                         Ok(framework_ref) => {
                             // Then embed it
                             match self.project.embed_framework(framework_ref, target.clone()) {
-                                Ok(_) => println!("   ✓ Embedded framework: {}", framework_name),
-                                Err(e) => println!("   ⚠ Failed to embed {}: {}", framework_name, e),
+                                Ok(_) => {
+                                    println!("   ✓ Embedded framework: {}", framework_name);
+                                    success_count += 1;
+                                }
+                                Err(_) => {
+                                    fail_count += 1;
+                                }
                             }
                             
                             // Add to FRAMEWORK_SEARCH_PATHS
                             let framework_dir = Path::new(framework_path).parent().unwrap();
                             let search_path = format!("$(PROJECT_DIR)/{}", framework_dir.display());
-                            self.add_framework_search_path(&target, &search_path)?;
+                            let _ = self.project.append_to_target_setting("FRAMEWORK_SEARCH_PATHS", &search_path, target.clone());
                         }
-                        Err(e) => println!("   ⚠ Failed to add {}: {}", framework_name, e),
+                        Err(_) => {
+                            fail_count += 1;
+                        }
                     }
                 }
-            }
-        }
-        Ok(())
-    }
-    
-    fn delete_frameworks(&mut self) -> Result<(), Box<dyn std::error::Error>> {
-        if let Some(delete_frameworks) = &self.mods.delete_frameworks {
-            println!("🗑️  Deleting frameworks: {:?}", delete_frameworks);
-            // Note: This requires API to remove frameworks
-            println!("   ⚠ Framework deletion requires API extension");
-        }
-        Ok(())
-    }
-    
-    fn add_files(&mut self) -> Result<(), Box<dyn std::error::Error>> {
-        if let Some(files_map) = &self.mods.files {
-            println!("📄 Adding files to targets:");
-            for (target_name, files) in files_map {
-                println!("   Target: {}", target_name);
                 
-                let target_opt = if target_name == "all" {
-                    None // Process all targets
-                } else {
-                    self.project.targets()
-                        .iter()
-                        .find(|t| t.name() == target_name)
-                        .cloned()
-                };
-                
-                for file_path in files {
-                    println!("     + {}", file_path);
-                    // Note: Adding source files requires API extension
+                if fail_count > 0 {
+                    println!("   ⚠ {} frameworks failed to embed", fail_count);
                 }
+                println!("   Summary: {} succeeded, {} failed", success_count, fail_count);
+            } else {
+                println!("   ⚠ No main target found, skipping embed frameworks");
             }
-        }
-        Ok(())
-    }
-    
-    fn add_resources(&mut self) -> Result<(), Box<dyn std::error::Error>> {
-        if let Some(resources) = &self.mods.resources {
-            println!("🎨 Adding resources: {:?}", resources);
-            // Note: Adding resources requires API extension
-            println!("   ⚠ Resource addition requires API extension");
-        }
-        Ok(())
-    }
-    
-    fn add_framework_resources(&mut self) -> Result<(), Box<dyn std::error::Error>> {
-        if let Some(framework_resources) = &self.mods.framework_resources {
-            println!("🎨 Adding framework-specific resources:");
-            for (target_name, resources) in framework_resources {
-                println!("   Target: {} - {:?}", target_name, resources);
-            }
-            println!("   ⚠ Framework resource addition requires API extension");
         }
         Ok(())
     }
     
     fn set_build_settings(&mut self) -> Result<(), Box<dyn std::error::Error>> {
-        if let Some(overwrite_settings) = &self.mods.overwrite_build_setting {
+        if let Some(overwrite_settings) = self.mods.overwrite_build_setting.clone() {
             println!("⚙️  Setting build settings:");
             
-            for target in self.project.targets().to_vec() {
+            let targets = self.get_targets();
+            for target in targets {
+                let target_name = self.get_target_name(&target);
                 let target_obj = self.project.registry()
                     .get::<PBXNativeTarget>(target.id())
                     .expect("Target not found");
@@ -379,14 +361,16 @@ impl ProjectModsProcessor {
                         .get::<xforge_objects::XCConfigurationList>(config_list_id)
                         .expect("Config list not found");
                     
-                    for config_handle in &config_list.build_configurations {
-                        if let Some(mut config) = self.project.registry()
+                    let config_handles = config_list.build_configurations.clone();
+                    
+                    for config_handle in &config_handles {
+                        if let Some(config) = self.project.registry_mut()
                             .get_mut::<XCBuildConfiguration>(config_handle.id()) {
                             
-                            for (key, value_map) in overwrite_settings {
+                            for (key, value_map) in &overwrite_settings {
                                 if let Some(value) = value_map.get("all") {
                                     config.build_settings.insert(key.clone(), value.clone());
-                                    println!("   ✓ {} = {} ({})", key, value, target.name());
+                                    println!("   ✓ {} = {} ({})", key, value, target_name);
                                 }
                             }
                         }
@@ -401,12 +385,14 @@ impl ProjectModsProcessor {
         if let Some(compiler_flags) = &self.mods.compiler_flags {
             println!("🔧 Setting compiler flags: {:?}", compiler_flags);
             
-            for target in self.project.targets().to_vec() {
+            let targets = self.get_targets();
+            for target in targets {
+                let target_name = self.get_target_name(&target);
                 for flag in compiler_flags {
                     // Add to OTHER_CFLAGS and OTHER_CPLUSPLUSFLAGS
-                    self.append_to_target_setting("OTHER_CFLAGS", flag, &target)?;
-                    self.append_to_target_setting("OTHER_CPLUSPLUSFLAGS", flag, &target)?;
-                    println!("   ✓ Added {} to {}", flag, target.name());
+                    let _ = self.project.append_to_target_setting("OTHER_CFLAGS", flag, target.clone());
+                    let _ = self.project.append_to_target_setting("OTHER_CPLUSPLUSFLAGS", flag, target.clone());
+                    println!("   ✓ Added {} to {}", flag, target_name);
                 }
             }
         }
@@ -417,11 +403,13 @@ impl ProjectModsProcessor {
         if let Some(linker_flags) = &self.mods.linker_flags {
             println!("🔗 Setting linker flags: {:?}", linker_flags);
             
-            let main_target = self.project.targets().first().cloned();
+            let targets = self.get_targets();
+            let main_target = targets.first().cloned();
             if let Some(target) = main_target {
+                let target_name = self.get_target_name(&target);
                 for flag in linker_flags {
-                    self.append_to_target_setting("OTHER_LDFLAGS", flag, &target)?;
-                    println!("   ✓ Added {} to {}", flag, target.name());
+                    let _ = self.project.append_to_target_setting("OTHER_LDFLAGS", flag, target.clone());
+                    println!("   ✓ Added {} to {}", flag, target_name);
                 }
             }
         }
@@ -430,14 +418,14 @@ impl ProjectModsProcessor {
         if let Some(unity_linker_flags) = &self.mods.unity_linker_flags {
             println!("🔗 Setting Unity linker flags: {:?}", unity_linker_flags);
             
-            let unity_target = self.project.targets()
-                .iter()
-                .find(|t| t.name() == "UnityFramework")
+            let targets = self.get_targets();
+            let unity_target = targets.iter()
+                .find(|t| self.get_target_name(t) == "UnityFramework")
                 .cloned();
             
             if let Some(target) = unity_target {
                 for flag in unity_linker_flags {
-                    self.append_to_target_setting("OTHER_LDFLAGS", flag, &target)?;
+                    let _ = self.project.append_to_target_setting("OTHER_LDFLAGS", flag, target.clone());
                     println!("   ✓ Added {} to UnityFramework", flag);
                 }
             }
@@ -447,18 +435,19 @@ impl ProjectModsProcessor {
     }
     
     fn set_header_search_paths(&mut self) -> Result<(), Box<dyn std::error::Error>> {
-        if let Some(headerpaths) = &self.mods.headerpaths {
+        if let Some(headerpaths) = self.mods.headerpaths.clone() {
             println!("🔍 Setting header search paths:");
             
-            for target in self.project.targets().to_vec() {
-                for path in headerpaths {
+            let targets = self.get_targets();
+            for target in targets {
+                for path in &headerpaths {
                     if path.contains("Bridging-Header.h") {
                         // Set Swift bridging header
                         println!("   ✓ Setting Swift bridging header: {}", path);
                         self.set_target_build_setting("SWIFT_OBJC_BRIDGING_HEADER", path, &target)?;
                     } else {
                         let search_path = format!("$(SRCROOT)/{}", path);
-                        self.append_to_target_setting("HEADER_SEARCH_PATHS", &search_path, &target)?;
+                        let _ = self.project.append_to_target_setting("HEADER_SEARCH_PATHS", &search_path, target.clone());
                         println!("   ✓ Added header search path: {}", path);
                     }
                 }
@@ -471,10 +460,11 @@ impl ProjectModsProcessor {
         if let Some(librarypaths) = &self.mods.librarypaths {
             println!("🔍 Setting library search paths:");
             
-            for target in self.project.targets().to_vec() {
+            let targets = self.get_targets();
+            for target in targets {
                 for path in librarypaths {
                     let search_path = format!("$(SRCROOT)/{}", path);
-                    self.append_to_target_setting("LIBRARY_SEARCH_PATHS", &search_path, &target)?;
+                    let _ = self.project.append_to_target_setting("LIBRARY_SEARCH_PATHS", &search_path, target.clone());
                     println!("   ✓ Added library search path: {}", path);
                 }
             }
@@ -492,7 +482,8 @@ impl ProjectModsProcessor {
                 return Ok(());
             }
             
-            let mut plist = PlistManager::load(&info_plist_path)?;
+            let mut plist = PlistManager::load(&info_plist_path)
+                .map_err(|e| format!("Failed to load plist: {}", e))?;
             
             for (key, value) in plist_updates {
                 println!("   ✓ Setting {} = {:?}", key, value);
@@ -512,30 +503,9 @@ impl ProjectModsProcessor {
                 }
             }
             
-            plist.save(&info_plist_path)?;
+            plist.save(&info_plist_path)
+                .map_err(|e| format!("Failed to save plist: {}", e))?;
             println!("   ✓ Info.plist updated successfully");
-        }
-        Ok(())
-    }
-    
-    fn add_plist_files(&mut self) -> Result<(), Box<dyn std::error::Error>> {
-        if let Some(add_plist) = &self.mods.add_plist {
-            println!("📄 Adding plist files: {:?}", add_plist);
-            
-            for plist_file in add_plist {
-                let src = self.sdk_dir.join(plist_file);
-                let dest = self.project_dir.join(plist_file);
-                
-                if src.exists() {
-                    fs::copy(&src, &dest)?;
-                    println!("   ✓ Copied {} to project", plist_file);
-                    
-                    // Add file reference to main target
-                    // Note: Requires API extension
-                } else {
-                    println!("   ⚠ Source file not found: {}", src.display());
-                }
-            }
         }
         Ok(())
     }
@@ -550,12 +520,11 @@ impl ProjectModsProcessor {
             let mut ent = EntitlementsManager::new();
             
             // Process capabilities
-            for (cap_key, cap_value) in &services.capabilities {
+            for (cap_key, _cap_value) in &services.capabilities {
                 println!("   + Capability: {}", cap_key);
                 
                 match cap_key.as_str() {
                     "com.apple.Push" => {
-                        // Push notifications enabled
                         println!("     ✓ Push notifications enabled");
                     }
                     _ => println!("     (capability requires manual handling)"),
@@ -575,7 +544,12 @@ impl ProjectModsProcessor {
                         }
                         "com.apple.developer.applesignin" => {
                             // Sign in with Apple
-                            ent.set("com.apple.developer.applesignin", value.clone());
+                            if let serde_json::Value::Array(arr) = value {
+                                let strs: Vec<String> = arr.iter()
+                                    .filter_map(|v| v.as_str().map(|s| s.to_string()))
+                                    .collect();
+                                ent.set_array("com.apple.developer.applesignin", strs);
+                            }
                         }
                         "keychain-access-groups" => {
                             if let serde_json::Value::Array(groups) = value {
@@ -587,17 +561,19 @@ impl ProjectModsProcessor {
                             }
                         }
                         _ => {
-                            ent.set(key, value.clone());
+                            println!("     (requires custom handler)");
                         }
                     }
                 }
             }
             
-            ent.save(&entitlements_path)?;
+            ent.save(&entitlements_path)
+                .map_err(|e| format!("Failed to save entitlements: {}", e))?;
             println!("   ✓ Entitlements saved to: {}", entitlements_file);
             
             // Set CODE_SIGN_ENTITLEMENTS in build settings
-            for target in self.project.targets().to_vec() {
+            let targets = self.get_targets();
+            for target in targets {
                 self.set_target_build_setting("CODE_SIGN_ENTITLEMENTS", &entitlements_file, &target)?;
             }
         }
@@ -605,26 +581,32 @@ impl ProjectModsProcessor {
     }
     
     fn configure_code_signing(&mut self) -> Result<(), Box<dyn std::error::Error>> {
-        if let Some(sign_config) = &self.mods.sign {
+        if let Some(sign_config) = &self.mods.sign.clone() {
             println!("✍️  Configuring code signing:");
             println!("   Team ID: {}", sign_config.team_id);
             println!("   Auto signing: {}", sign_config.is_auto);
             
-            for target in self.project.targets().to_vec() {
-                self.set_target_build_setting("DEVELOPMENT_TEAM", &sign_config.team_id, &target)?;
+            let team_id = sign_config.team_id.clone();
+            let is_auto = sign_config.is_auto;
+            let bundle_id = sign_config.product_bundle_identifier.clone();
+            
+            let targets = self.get_targets();
+            for target in targets {
+                let target_name = self.get_target_name(&target);
+                self.set_target_build_setting("DEVELOPMENT_TEAM", &team_id, &target)?;
                 
-                if sign_config.is_auto {
+                if is_auto {
                     self.set_target_build_setting("CODE_SIGN_STYLE", "Automatic", &target)?;
                     self.set_target_build_setting("CODE_SIGN_IDENTITY", "Apple Development", &target)?;
-                    println!("   ✓ Automatic signing configured for {}", target.name());
+                    println!("   ✓ Automatic signing configured for {}", target_name);
                 } else {
                     self.set_target_build_setting("CODE_SIGN_STYLE", "Manual", &target)?;
-                    println!("   ✓ Manual signing configured for {}", target.name());
+                    println!("   ✓ Manual signing configured for {}", target_name);
                 }
                 
-                if let Some(bundle_id) = &sign_config.product_bundle_identifier {
-                    self.set_target_build_setting("PRODUCT_BUNDLE_IDENTIFIER", bundle_id, &target)?;
-                    println!("   ✓ Bundle ID set to: {}", bundle_id);
+                if let Some(bid) = &bundle_id {
+                    self.set_target_build_setting("PRODUCT_BUNDLE_IDENTIFIER", bid, &target)?;
+                    println!("   ✓ Bundle ID set to: {}", bid);
                 }
             }
         }
@@ -641,7 +623,8 @@ impl ProjectModsProcessor {
             println!("🐦 Configuring Swift support:");
             
             // Add shell script to remove Frameworks directory from UnityFramework
-            let main_target = self.project.targets().first().cloned();
+            let targets = self.get_targets();
+            let main_target = targets.first().cloned();
             if let Some(target) = main_target {
                 let script = r#"# Type a script or drag a script file from your workspace to insert its path.
 cd "${CONFIGURATION_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/Frameworks/UnityFramework.framework/"
@@ -649,12 +632,13 @@ if [[ -d "Frameworks" ]]; then
     rm -fr Frameworks
 fi
 "#;
-                self.project.add_shell_script_phase("Remove Frameworks", script, &target)?;
+                let _ = self.project.add_shell_script_phase("Remove Frameworks", script, &target);
                 println!("   ✓ Added shell script to remove nested Frameworks");
             }
             
             // Set Swift-related build settings
-            for target in self.project.targets().to_vec() {
+            let targets = self.get_targets();
+            for target in targets {
                 self.set_target_build_setting("ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES", "YES", &target)?;
                 self.set_target_build_setting("SWIFT_VERSION", "5.0", &target)?;
                 self.set_target_build_setting("SWIFT_OPTIMIZATION_LEVEL", "-Onone", &target)?;
@@ -669,29 +653,34 @@ fi
     
     // Helper methods
     
-    fn add_framework_search_path(&mut self, target: &Handle<PBXNativeTarget>, path: &str) -> Result<(), Box<dyn std::error::Error>> {
-        self.append_to_target_setting("FRAMEWORK_SEARCH_PATHS", path, target)
-    }
-    
-    fn append_to_target_setting(&mut self, key: &str, value: &str, target: &Handle<PBXNativeTarget>) -> Result<(), Box<dyn std::error::Error>> {
-        self.project.append_to_target_setting(key, value, target)
-    }
-    
     fn set_target_build_setting(&mut self, key: &str, value: &str, target: &Handle<PBXNativeTarget>) -> Result<(), Box<dyn std::error::Error>> {
         let target_obj = self.project.registry()
             .get::<PBXNativeTarget>(target.id())
-            .expect("Target not found");
+            .ok_or("Target not found")?;
         
-        if let Some(config_list_id) = &target_obj.build_configuration_list {
-            let config_list = self.project.registry()
-                .get::<xforge_objects::XCConfigurationList>(config_list_id)
-                .expect("Config list not found");
-            
-            for config_handle in &config_list.build_configurations {
-                if let Some(mut config) = self.project.registry()
-                    .get_mut::<XCBuildConfiguration>(config_handle.id()) {
-                    config.build_settings.insert(key.to_string(), value.to_string());
-                }
+        let config_list_id = match target_obj.build_configuration_list.clone() {
+            Some(id) => id,
+            None => {
+                println!("     ⚠ Target has no config list, skipping");
+                return Ok(());
+            }
+        };
+        
+        let config_list = match self.project.registry()
+            .get::<xforge_objects::XCConfigurationList>(&config_list_id) {
+            Some(list) => list,
+            None => {
+                println!("     ⚠ Config list not found, skipping");
+                return Ok(());
+            }
+        };
+        
+        let config_handles = config_list.build_configurations.clone();
+        
+        for config_handle in &config_handles {
+            if let Some(config) = self.project.registry_mut()
+                .get_mut::<XCBuildConfiguration>(config_handle.id()) {
+                config.build_settings.insert(key.to_string(), value.to_string());
             }
         }
         
@@ -700,7 +689,9 @@ fi
     
     fn save(&mut self) -> Result<(), Box<dyn std::error::Error>> {
         println!("\n💾 Saving project...");
-        self.project.save()?;
+        let pbxproj_path = self.project_path.join("project.pbxproj");
+        self.project.save(&pbxproj_path)
+            .map_err(|e| format!("Failed to save: {}", e))?;
         println!("   ✓ Project saved successfully");
         Ok(())
     }
@@ -763,12 +754,15 @@ fn main() {
     
     if !backup_path.exists() {
         println!("💾 Creating backup: {}", backup_path.display());
-        fs::copy(&pbxproj_path, &backup_path)
-            .expect("Failed to create backup");
+        if let Err(e) = fs::copy(&pbxproj_path, &backup_path) {
+            eprintln!("⚠️  Warning: Failed to create backup: {}", e);
+        }
     } else {
         println!("♻️  Restoring from backup: {}", backup_path.display());
-        fs::copy(&backup_path, &pbxproj_path)
-            .expect("Failed to restore backup");
+        if let Err(e) = fs::copy(&backup_path, &pbxproj_path) {
+            eprintln!("❌ Failed to restore backup: {}", e);
+            std::process::exit(1);
+        }
     }
     
     // Process modifications

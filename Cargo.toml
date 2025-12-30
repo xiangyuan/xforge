@@ -82,6 +82,8 @@ xforge-scheme.workspace = true
 xforge-config.workspace = true
 anyhow.workspace = true
 thiserror.workspace = true
+serde = { workspace = true, features = ["derive"] }
+serde_json.workspace = true
 
 [dev-dependencies]
 serde_json.workspace = true
