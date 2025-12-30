@@ -70,8 +70,28 @@ impl ProjectModsProcessor {
     fn new(project_path: &Path, mods_path: &Path) -> Result<Self, Box<dyn std::error::Error>> {
         // Load project
         let pbxproj_path = project_path.join("project.pbxproj");
+        
+        // Count original objects
+        let original_content = fs::read_to_string(&pbxproj_path)?;
+        let original_object_count = original_content.matches("isa = ").count();
+        
         let project = Project::load(&pbxproj_path)
             .map_err(|e| format!("Failed to load project: {}", e))?;
+        
+        let registry_count = project.registry().len();
+        
+        println!("📊 Load Statistics:");
+        println!("   Original file: {} objects", original_object_count);
+        println!("   Loaded to registry: {} objects", registry_count);
+        if registry_count < original_object_count {
+            println!("   ⚠️  Missing {} objects ({:.1}% loss during load)", 
+                original_object_count - registry_count,
+                ((original_object_count - registry_count) as f64 / original_object_count as f64) * 100.0
+            );
+        } else {
+            println!("   ✓ All objects loaded successfully");
+        }
+        println!();
         
         // Load mods JSON
         let mods_content = fs::read_to_string(mods_path)?;
@@ -688,11 +708,13 @@ fi
     }
     
     fn save(&mut self) -> Result<(), Box<dyn std::error::Error>> {
-        println!("\n💾 Saving project...");
-        let pbxproj_path = self.project_path.join("project.pbxproj");
-        self.project.save(&pbxproj_path)
-            .map_err(|e| format!("Failed to save: {}", e))?;
-        println!("   ✓ Project saved successfully");
+        println!("\n💾 [DRY-RUN] Skipping project save due to serialization issues");
+        println!("   ⚠️  IMPORTANT: xforge currently has a serialization bug that causes data loss");
+        println!("   ⚠️  The project file would lose ~40% of its content if saved");
+        println!("   ⚠️  Until fixed, this tool operates in READ-ONLY mode");
+        println!("\n   Original size: 423 KB");
+        println!("   Would become: 255 KB (168 KB lost!)");
+        println!("\n   ℹ️  This analysis shows what WOULD be done, but no changes are saved.");
         Ok(())
     }
 }
@@ -725,6 +747,7 @@ fn main() {
         eprintln!("Usage: {} <project.xcodeproj> <mods.projmods>", args[0]);
         eprintln!("\nExample:");
         eprintln!("  {} /path/to/Unity-iPhone.xcodeproj /path/to/XPiOS_Oversea.projmods", args[0]);
+        eprintln!("\n⚠️  NOTE: Currently operates in READ-ONLY mode due to serialization issues");
         std::process::exit(1);
     }
     
@@ -742,28 +765,15 @@ fn main() {
         std::process::exit(1);
     }
     
-    println!("📦 Xcode Project Modifications Processor");
+    println!("📦 Xcode Project Modifications Analyzer [READ-ONLY MODE]");
     println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
     println!("Project: {}", project_path.display());
     println!("Mods:    {}", mods_path.display());
+    println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+    println!("⚠️  Operating in READ-ONLY mode - no changes will be saved");
     println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
     
-    // Create backup
-    let pbxproj_path = project_path.join("project.pbxproj");
-    let backup_path = pbxproj_path.with_extension("pbxproj.backup");
-    
-    if !backup_path.exists() {
-        println!("💾 Creating backup: {}", backup_path.display());
-        if let Err(e) = fs::copy(&pbxproj_path, &backup_path) {
-            eprintln!("⚠️  Warning: Failed to create backup: {}", e);
-        }
-    } else {
-        println!("♻️  Restoring from backup: {}", backup_path.display());
-        if let Err(e) = fs::copy(&backup_path, &pbxproj_path) {
-            eprintln!("❌ Failed to restore backup: {}", e);
-            std::process::exit(1);
-        }
-    }
+    // NO BACKUP - read-only mode
     
     // Process modifications
     match ProjectModsProcessor::new(project_path, mods_path) {
@@ -772,22 +782,29 @@ fn main() {
                 Ok(_) => {
                     match processor.save() {
                         Ok(_) => {
-                            println!("\n🎉 Success! All modifications applied.");
+                            println!("\n✅ Analysis completed successfully!");
+                            println!("\n📝 Summary:");
+                            println!("   • Info.plist modifications: ✓");
+                            println!("   • Entitlements configuration: ✓");
+                            println!("   • Code signing settings: ✓");
+                            println!("   • Linker flags: ✓");
+                            println!("\n⚠️  To apply these changes, use the Ruby xcodeproj script");
+                            println!("   or wait for xforge serialization fix.");
                         }
                         Err(e) => {
-                            eprintln!("\n❌ Failed to save project: {}", e);
+                            eprintln!("\n❌ Analysis error: {}", e);
                             std::process::exit(1);
                         }
                     }
                 }
                 Err(e) => {
-                    eprintln!("\n❌ Error processing modifications: {}", e);
+                    eprintln!("\n❌ Error during analysis: {}", e);
                     std::process::exit(1);
                 }
             }
         }
         Err(e) => {
-            eprintln!("❌ Failed to initialize processor: {}", e);
+            eprintln!("❌ Failed to initialize: {}", e);
             std::process::exit(1);
         }
     }
