@@ -2,6 +2,9 @@ use clap::{Parser, Subcommand};
 use std::path::PathBuf;
 use xforge_model::Project;
 use xforge_core::ProductType;
+use xforge_workspace::{Workspace, FileRef};
+use xforge_scheme::{Scheme, BuildableReference};
+use xforge_config::{XCConfig, BuildContext};
 
 #[derive(Parser)]
 #[command(name = "xforge")]
@@ -56,6 +59,99 @@ enum Commands {
         #[arg(value_name = "PROJECT")]
         project: PathBuf,
     },
+    
+    /// Workspace commands
+    #[command(subcommand)]
+    Workspace(WorkspaceCommands),
+    
+    /// Scheme commands
+    #[command(subcommand)]
+    Scheme(SchemeCommands),
+    
+    /// Config commands
+    #[command(subcommand)]
+    Config(ConfigCommands),
+}
+
+#[derive(Subcommand)]
+enum WorkspaceCommands {
+    /// Create a new workspace
+    New {
+        /// Path to .xcworkspace file
+        #[arg(value_name = "WORKSPACE")]
+        workspace: PathBuf,
+    },
+    
+    /// Add a project to workspace
+    AddProject {
+        /// Path to .xcworkspace file
+        #[arg(value_name = "WORKSPACE")]
+        workspace: PathBuf,
+        
+        /// Project path
+        #[arg(value_name = "PROJECT")]
+        project: PathBuf,
+    },
+    
+    /// List projects in workspace
+    List {
+        /// Path to .xcworkspace file
+        #[arg(value_name = "WORKSPACE")]
+        workspace: PathBuf,
+    },
+}
+
+#[derive(Subcommand)]
+enum SchemeCommands {
+    /// Create a new scheme
+    New {
+        /// Scheme name
+        #[arg(value_name = "NAME")]
+        name: String,
+        
+        /// Output path
+        #[arg(short, long, value_name = "PATH")]
+        output: PathBuf,
+    },
+    
+    /// Show scheme information
+    Info {
+        /// Path to .xcscheme file
+        #[arg(value_name = "SCHEME")]
+        scheme: PathBuf,
+    },
+}
+
+#[derive(Subcommand)]
+enum ConfigCommands {
+    /// Create a new config file
+    New {
+        /// Output path
+        #[arg(value_name = "PATH")]
+        path: PathBuf,
+    },
+    
+    /// Set a build setting
+    Set {
+        /// Path to .xcconfig file
+        #[arg(value_name = "CONFIG")]
+        config: PathBuf,
+        
+        /// Setting key
+        #[arg(value_name = "KEY")]
+        key: String,
+        
+        /// Setting value
+        #[arg(value_name = "VALUE")]
+        value: String,
+    },
+    
+    /// Show config settings
+    Show {
+        /// Path to .xcconfig file
+        #[arg(value_name = "CONFIG")]
+        config: PathBuf,
+    },
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -73,6 +169,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         Commands::ListTargets { project } => {
             cmd_list_targets(&project)?;
+        }
+        Commands::Workspace(cmd) => {
+            handle_workspace_command(cmd)?;
+        }
+        Commands::Scheme(cmd) => {
+            handle_scheme_command(cmd)?;
+        }
+        Commands::Config(cmd) => {
+            handle_config_command(cmd)?;
         }
     }
     
@@ -180,5 +285,84 @@ fn cmd_list_targets(project_path: &PathBuf) -> Result<(), Box<dyn std::error::Er
         }
     }
     
+    Ok(())
+}
+
+// Workspace command handlers
+fn handle_workspace_command(cmd: WorkspaceCommands) -> Result<(), Box<dyn std::error::Error>> {
+    match cmd {
+        WorkspaceCommands::New { workspace } => {
+            let ws = Workspace::new();
+            ws.save(&workspace)?;
+            println!("Created workspace: {}", workspace.display());
+        }
+        WorkspaceCommands::AddProject { workspace, project } => {
+            let mut ws = Workspace::load(&workspace)?;
+            ws.add_project(&project)?;
+            ws.save(&workspace)?;
+            println!("Added project: {}", project.display());
+        }
+        WorkspaceCommands::List { workspace } => {
+            let ws = Workspace::load(&workspace)?;
+            println!("\nProjects ({}):", ws.project_paths().len());
+            for path in ws.project_paths() {
+                println!("  • {}", path);
+            }
+        }
+    }
+    Ok(())
+}
+
+// Scheme command handlers
+fn handle_scheme_command(cmd: SchemeCommands) -> Result<(), Box<dyn std::error::Error>> {
+    match cmd {
+        SchemeCommands::New { name, output } => {
+            let scheme = Scheme::new(&name, "Debug", "Release");
+            scheme.save(&output)?;
+            println!("Created scheme: {}", output.display());
+        }
+        SchemeCommands::Info { scheme } => {
+            let s = Scheme::load(&scheme)?;
+            println!("\nScheme Information:");
+            println!("  Version: {}", s.version);
+            println!("  Test Configuration: {}", s.test_action.build_configuration);
+            println!("  Launch Configuration: {}", s.launch_action.build_configuration);
+            println!("  Archive Configuration: {}", s.archive_action.build_configuration);
+            println!("  Build Entries: {}", s.build_action.build_action_entries.entries.len());
+        }
+    }
+    Ok(())
+}
+
+// Config command handlers
+fn handle_config_command(cmd: ConfigCommands) -> Result<(), Box<dyn std::error::Error>> {
+    match cmd {
+        ConfigCommands::New { path } => {
+            let config = XCConfig::new();
+            config.save(&path)?;
+            println!("Created config: {}", path.display());
+        }
+        ConfigCommands::Set { config, key, value } => {
+            let mut cfg = XCConfig::load(&config)?;
+            cfg.set(&key, &value);
+            cfg.save(&config)?;
+            println!("Set {} = {}", key, value);
+        }
+        ConfigCommands::Show { config } => {
+            let cfg = XCConfig::load(&config)?;
+            let settings = cfg.all_settings();
+            println!("\nBuild Settings ({}):", settings.len());
+            for (key, value) in settings {
+                println!("  {} = {}", key, value);
+            }
+            
+            if !cfg.includes().is_empty() {
+                println!("\nIncludes:");
+                for include in cfg.includes() {
+                    println!("  #include \"{}\"", include.display());
+                }
+            }
+        }
+    }
     Ok(())
 }

@@ -1,0 +1,12 @@
+[package]
+name = "xforge-scheme"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+quick-xml = { workspace = true, features = ["serialize"] }
+serde = { workspace = true, features = ["derive"] }
+anyhow.workspace = true
+
+[dev-dependencies]
+tempfile = "3.13.0"

@@ -7,6 +7,9 @@ members = [
     "crates/xforge-query",
     "crates/xforge-serialization",
     "crates/xforge-cli",
+    "crates/xforge-workspace",
+    "crates/xforge-scheme",
+    "crates/xforge-config",
 ]
 resolver = "2"
 
@@ -27,6 +30,7 @@ thiserror = "1.0"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 plist = "1.6"
+quick-xml = { version = "0.36", features = ["serialize"] }
 
 # UUID and utilities
 uuid = { version = "1.6", features = ["v4"] }
@@ -39,6 +43,9 @@ indexmap = { version = "2.1", features = ["serde"] }
 walkdir = "2.4"
 tempfile = "3.8"
 
+# Text processing
+regex = "1.10"
+
 # CLI (optional)
 clap = { version = "4.4", features = ["derive"] }
 
@@ -49,6 +56,9 @@ xforge-objects = { path = "crates/xforge-objects" }
 xforge-builder = { path = "crates/xforge-builder" }
 xforge-query = { path = "crates/xforge-query" }
 xforge-serialization = { path = "crates/xforge-serialization" }
+xforge-workspace = { path = "crates/xforge-workspace" }
+xforge-scheme = { path = "crates/xforge-scheme" }
+xforge-config = { path = "crates/xforge-config" }
 
 [package]
 name = "xforge"
@@ -67,6 +77,9 @@ xforge-objects.workspace = true
 xforge-builder.workspace = true
 xforge-query.workspace = true
 xforge-serialization.workspace = true
+xforge-workspace.workspace = true
+xforge-scheme.workspace = true
+xforge-config.workspace = true
 anyhow.workspace = true
 thiserror.workspace = true
 

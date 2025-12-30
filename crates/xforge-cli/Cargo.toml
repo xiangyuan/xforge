@@ -14,6 +14,9 @@ xforge-core.workspace = true
 xforge-model.workspace = true
 xforge-objects.workspace = true
 xforge-query.workspace = true
+xforge-workspace.workspace = true
+xforge-scheme.workspace = true
+xforge-config.workspace = true
 clap = { version = "4.5", features = ["derive"] }
 anyhow.workspace = true
 thiserror.workspace = true

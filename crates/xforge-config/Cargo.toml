@@ -1,0 +1,12 @@
+[package]
+name = "xforge-config"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+regex = { workspace = true }
+anyhow.workspace = true
+indexmap = { workspace = true }
+
+[dev-dependencies]
+tempfile = "3.13.0"
