@@ -1,6 +1,6 @@
 //! Project - Core domain model for Xcode projects
 
-use xforge_core::{ObjectId, Registry};
+use xforge_core::{ObjectId, Registry, Handle};
 use std::path::{Path, PathBuf};
 use std::fs;
 
@@ -497,6 +497,109 @@ impl Project {
         
         Ok(())
     }
+
+    /// Add a shell script build phase to a target
+    /// 
+    /// # Arguments
+    /// * `name` - Display name for the script phase (e.g., "Run SwiftLint")
+    /// * `script` - Shell script content to execute
+    /// * `target` - Target handle to add the script phase to
+    /// 
+    /// # Returns
+    /// Handle to the created PBXShellScriptBuildPhase
+    /// 
+    /// # Example
+    /// ```no_run
+    /// # use xforge_model::Project;
+    /// # use xforge_core::ProductType;
+    /// # let mut project = Project::new("MyApp");
+    /// # let target = project.create_target("MyApp", ProductType::Application).unwrap();
+    /// let script = r#"
+    /// if which swiftlint >/dev/null; then
+    ///   swiftlint
+    /// else
+    ///   echo "warning: SwiftLint not installed"
+    /// fi
+    /// "#;
+    /// let phase = project.add_shell_script_phase("Run SwiftLint", script, &target)
+    ///     .expect("Failed to add script phase");
+    /// ```
+    pub fn add_shell_script_phase(
+        &mut self,
+        name: impl Into<String>,
+        script: impl Into<String>,
+        target: &Handle<xforge_objects::PBXNativeTarget>,
+    ) -> Result<Handle<xforge_objects::PBXShellScriptBuildPhase>, String> {
+        // Create the shell script phase
+        let phase = xforge_objects::PBXShellScriptBuildPhase::new(script)
+            .with_name(name);
+        
+        let phase_handle = self.registry.register(phase);
+        
+        // Add phase to target's build phases
+        if let Some(target_obj) = self.registry.get_mut::<xforge_objects::PBXNativeTarget>(target.id()) {
+            target_obj.build_phases.push(*phase_handle.id());
+        } else {
+            return Err("Target not found".to_string());
+        }
+        
+        Ok(phase_handle)
+    }
+
+    /// Add a shell script phase with input and output files
+    /// 
+    /// This is useful for scripts that need to track dependencies for incremental builds
+    /// 
+    /// # Example
+    /// ```no_run
+    /// # use xforge_model::Project;
+    /// # use xforge_core::ProductType;
+    /// # let mut project = Project::new("MyApp");
+    /// # let target = project.create_target("MyApp", ProductType::Application).unwrap();
+    /// let input_files = vec!["$(SRCROOT)/Resources/Strings.json"];
+    /// let output_files = vec!["$(DERIVED_FILE_DIR)/Localizable.strings"];
+    /// 
+    /// project.add_shell_script_phase_with_files(
+    ///     "Generate Strings",
+    ///     "generate_strings.sh",
+    ///     &target,
+    ///     input_files,
+    ///     output_files
+    /// ).expect("Failed to add script phase");
+    /// ```
+    pub fn add_shell_script_phase_with_files(
+        &mut self,
+        name: impl Into<String>,
+        script: impl Into<String>,
+        target: &Handle<xforge_objects::PBXNativeTarget>,
+        input_paths: Vec<impl Into<String>>,
+        output_paths: Vec<impl Into<String>>,
+    ) -> Result<Handle<xforge_objects::PBXShellScriptBuildPhase>, String> {
+        // Create the shell script phase
+        let mut phase = xforge_objects::PBXShellScriptBuildPhase::new(script)
+            .with_name(name);
+        
+        // Add input paths
+        for path in input_paths {
+            phase.add_input_path(path);
+        }
+        
+        // Add output paths
+        for path in output_paths {
+            phase.add_output_path(path);
+        }
+        
+        let phase_handle = self.registry.register(phase);
+        
+        // Add phase to target's build phases
+        if let Some(target_obj) = self.registry.get_mut::<xforge_objects::PBXNativeTarget>(target.id()) {
+            target_obj.build_phases.push(*phase_handle.id());
+        } else {
+            return Err("Target not found".to_string());
+        }
+        
+        Ok(phase_handle)
+    }
 }
 
 #[cfg(test)]
@@ -650,5 +753,63 @@ mod tests {
         let group = project.registry().get::<xforge_objects::PBXGroup>(sources_group.id())
             .expect("Group not found");
         assert_eq!(group.children.len(), 2);
+    }
+
+    #[test]
+    fn test_add_shell_script_phase() {
+        let mut project = Project::new("TestProject");
+        
+        // Create a target
+        let target = project.create_target("MyApp".to_string(), ProductType::Application)
+            .expect("Failed to create target");
+        
+        // Add a simple shell script phase
+        let script = "echo 'Building...'";
+        let phase_handle = project.add_shell_script_phase("Custom Build Step", script, &target)
+            .expect("Failed to add script phase");
+        
+        // Verify phase was created
+        let phase = project.registry().get::<xforge_objects::PBXShellScriptBuildPhase>(phase_handle.id())
+            .expect("Phase not found");
+        assert_eq!(phase.name, Some("Custom Build Step".to_string()));
+        assert_eq!(phase.shell_script, "echo 'Building...'");
+        assert_eq!(phase.input_paths.len(), 0);
+        assert_eq!(phase.output_paths.len(), 0);
+        
+        // Verify phase was added to target
+        let target_obj = project.registry().get::<xforge_objects::PBXNativeTarget>(target.id())
+            .expect("Target not found");
+        assert_eq!(target_obj.build_phases.len(), 4); // sources, frameworks, resources, shell script
+    }
+
+    #[test]
+    fn test_add_shell_script_phase_with_files() {
+        let mut project = Project::new("TestProject");
+        
+        // Create a target
+        let target = project.create_target("MyApp".to_string(), ProductType::Application)
+            .expect("Failed to create target");
+        
+        // Add shell script with input/output files
+        let input_files = vec!["$(SRCROOT)/config.json", "$(SRCROOT)/template.txt"];
+        let output_files = vec!["$(DERIVED_FILE_DIR)/Generated.swift"];
+        
+        let phase_handle = project.add_shell_script_phase_with_files(
+            "Code Generation",
+            "swift codegen.swift",
+            &target,
+            input_files,
+            output_files
+        ).expect("Failed to add script phase");
+        
+        // Verify phase configuration
+        let phase = project.registry().get::<xforge_objects::PBXShellScriptBuildPhase>(phase_handle.id())
+            .expect("Phase not found");
+        assert_eq!(phase.name, Some("Code Generation".to_string()));
+        assert_eq!(phase.shell_script, "swift codegen.swift");
+        assert_eq!(phase.input_paths.len(), 2);
+        assert_eq!(phase.output_paths.len(), 1);
+        assert_eq!(phase.input_paths[0], "$(SRCROOT)/config.json");
+        assert_eq!(phase.output_paths[0], "$(DERIVED_FILE_DIR)/Generated.swift");
     }
 }
