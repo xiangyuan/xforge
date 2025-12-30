@@ -12,11 +12,14 @@ pub mod object_id;
 pub mod registry;
 pub mod traits;
 
+pub mod product_type;
+
 pub use error::{Error, Result};
 pub use handle::Handle;
 pub use object_id::ObjectId;
 pub use registry::Registry;
 pub use traits::PBXObject;
+pub use product_type::ProductType;
 
 #[cfg(test)]
 mod tests {

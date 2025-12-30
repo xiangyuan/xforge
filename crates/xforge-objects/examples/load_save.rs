@@ -1,55 +1,42 @@
-//! Example: Load and save Xcode projects
+//! Example: Demonstrate serialization/deserialization
 
-use xforge_objects::Project;
+use xforge_objects::{serialize_registry, deserialize_registry, PBXProject};
+use xforge_core::{Registry, ObjectId};
+use xforge_serialization::PlistWriter;
 
 fn main() -> Result<(), String> {
-    println!("Xcode Project Load/Save Demo");
-    println!("============================\n");
+    println!("Xcode Project Serialization Demo");
+    println!("=================================\n");
     
-    // Example 1: Create a new project
-    println!("1. Creating new project...");
-    let mut project = Project::new("MyTestApp");
-    println!("   ✓ Created project 'MyTestApp'\n");
+    // Example 1: Create objects and serialize
+    println!("1. Creating objects in registry...");
+    let mut registry = Registry::new();
     
-    // Example 2: Access root project
-    if let Some(root) = project.root_project() {
-        println!("2. Project info:");
-        println!("   Name: {}", root.name);
-        println!("   Targets: {}", root.targets.len());
-        println!();
-    }
+    let project = PBXProject::new("DemoApp");
+    let project_id = ObjectId::generate();
+    registry.register_with_id(project_id.clone(), project);
     
-    // Example 3: Save project
-    println!("3. Saving project to /tmp/test.pbxproj...");
-    match project.save("/tmp/test.pbxproj") {
-        Ok(_) => println!("   ✓ Project saved successfully\n"),
-        Err(e) => {
-            println!("   ✗ Failed to save: {}\n", e);
-            return Err(e);
-        }
-    }
+    println!("   ✓ Created PBXProject 'DemoApp'\n");
     
-    // Example 4: Load project back
-    println!("4. Loading project from /tmp/test.pbxproj...");
-    match Project::load("/tmp/test.pbxproj") {
-        Ok(loaded_project) => {
-            println!("   ✓ Project loaded successfully");
-            if let Some(root) = loaded_project.root_project() {
-                println!("   Loaded project name: {}", root.name);
-            }
-            println!();
-        }
-        Err(e) => {
-            println!("   ✗ Failed to load: {}\n", e);
-            return Err(e);
-        }
-    }
+    // Example 2: Serialize to plist
+    println!("2. Serializing to plist format...");
+    let plist = serialize_registry(&registry, &project_id.to_string());
     
-    println!("✓ All operations completed successfully!");
-    println!("\nUsage in your code:");
-    println!("  let project = Project::new(\"MyApp\");");
-    println!("  project.save(\"MyApp.xcodeproj/project.pbxproj\")?;");
-    println!("  let loaded = Project::load(\"MyApp.xcodeproj/project.pbxproj\")?;");
+    let mut writer = PlistWriter::new();
+    let plist_string = writer.write_plist(&plist)?;
+    
+    println!("   ✓ Serialized {} bytes", plist_string.len());
+    println!("   First 200 chars:\n   {}\n", &plist_string[..200.min(plist_string.len())]);
+    
+    // Example 3: Deserialize back
+    println!("3. Deserializing from plist...");
+    let (loaded_registry, loaded_root_id) = deserialize_registry(&plist)?;
+    
+    println!("   ✓ Loaded {} objects", loaded_registry.len());
+    println!("   Root ID: {}\n", loaded_root_id.to_string());
+    
+    println!("✓ Serialization round-trip successful!");
+    println!("\nNote: Use xforge_model::Project for full load/save API");
     
     Ok(())
 }

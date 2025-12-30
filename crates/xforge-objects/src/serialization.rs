@@ -16,6 +16,10 @@ use crate::{
         PBXShellScriptBuildPhase, PBXCopyFilesBuildPhase, PBXBuildFile,
     },
     pbx_container_item_proxy::PBXContainerItemProxy,
+    pbx_file_system_synchronized::{
+        PBXFileSystemSynchronizedBuildFileExceptionSet,
+        PBXFileSystemSynchronizedRootGroup,
+    },
     pbx_target_dependency::PBXTargetDependency,
     pbx_variant_group::PBXVariantGroup,
     pbx_reference_proxy::PBXReferenceProxy,
@@ -92,6 +96,10 @@ fn serialize_object(obj: &dyn PBXObject, _registry: &Registry) -> Option<PlistVa
         serialize_build_file(build_file, &mut dict);
     } else if let Some(proxy) = any_obj.downcast_ref::<PBXContainerItemProxy>() {
         serialize_container_item_proxy(proxy, &mut dict);
+    } else if let Some(exception_set) = any_obj.downcast_ref::<PBXFileSystemSynchronizedBuildFileExceptionSet>() {
+        serialize_file_system_exception_set(exception_set, &mut dict);
+    } else if let Some(sync_group) = any_obj.downcast_ref::<PBXFileSystemSynchronizedRootGroup>() {
+        serialize_file_system_synchronized_group(sync_group, &mut dict);
     } else if let Some(dependency) = any_obj.downcast_ref::<PBXTargetDependency>() {
         serialize_target_dependency(dependency, &mut dict);
     } else if let Some(variant_group) = any_obj.downcast_ref::<PBXVariantGroup>() {
@@ -448,4 +456,39 @@ fn serialize_version_group(group: &XCVersionGroup, dict: &mut IndexMap<String, P
     }
     
     dict.insert("versionGroupType".to_string(), PlistValue::String(group.version_group_type().to_string()));
+}
+
+fn serialize_file_system_exception_set(exception_set: &PBXFileSystemSynchronizedBuildFileExceptionSet, dict: &mut IndexMap<String, PlistValue>) {
+    // Serialize membershipExceptions array
+    if !exception_set.membership_exceptions.is_empty() {
+        let exceptions: Vec<PlistValue> = exception_set.membership_exceptions
+            .iter()
+            .map(|s| PlistValue::String(s.clone()))
+            .collect();
+        dict.insert("membershipExceptions".to_string(), PlistValue::Array(exceptions));
+    }
+    
+    // Serialize target reference
+    if let Some(target) = exception_set.target {
+        dict.insert("target".to_string(), PlistValue::String(target.to_uuid_string()));
+    }
+}
+
+fn serialize_file_system_synchronized_group(sync_group: &PBXFileSystemSynchronizedRootGroup, dict: &mut IndexMap<String, PlistValue>) {
+    // Serialize path
+    if let Some(path) = &sync_group.path {
+        dict.insert("path".to_string(), PlistValue::String(path.clone()));
+    }
+    
+    // Serialize sourceTree
+    dict.insert("sourceTree".to_string(), PlistValue::String(sync_group.source_tree.clone()));
+    
+    // Serialize exceptions array
+    if !sync_group.exceptions.is_empty() {
+        let exceptions: Vec<PlistValue> = sync_group.exceptions
+            .iter()
+            .map(|id| PlistValue::String(id.to_uuid_string()))
+            .collect();
+        dict.insert("exceptions".to_string(), PlistValue::Array(exceptions));
+    }
 }

@@ -1,8 +1,6 @@
 //! PBXTarget and its variants
 
-use xforge_core::{ObjectId, PBXObject};
-use xforge_model::ProductType;
-
+use xforge_core::{ObjectId, PBXObject, ProductType};
 #[derive(Debug, Clone)]
 pub struct PBXNativeTarget {
     id: ObjectId,
@@ -11,6 +9,7 @@ pub struct PBXNativeTarget {
     pub build_phases: Vec<ObjectId>,
     pub build_rules: Vec<ObjectId>,
     pub dependencies: Vec<ObjectId>,
+    pub package_product_dependencies: Vec<ObjectId>,
     pub product_name: Option<String>,
     pub product_reference: Option<ObjectId>,
     pub product_type: Option<ProductType>,
@@ -25,6 +24,7 @@ impl PBXNativeTarget {
             build_phases: Vec::new(),
             build_rules: Vec::new(),
             dependencies: Vec::new(),
+            package_product_dependencies: Vec::new(),
             product_name: None,
             product_reference: None,
             product_type: None,
@@ -57,6 +57,14 @@ impl PBXNativeTarget {
     
     pub fn add_build_phase(&mut self, phase_id: ObjectId) {
         self.build_phases.push(phase_id);
+    }
+    
+    pub fn dependencies(&self) -> &[ObjectId] {
+        &self.dependencies
+    }
+    
+    pub fn package_product_dependencies(&self) -> &[ObjectId] {
+        &self.package_product_dependencies
     }
 }
 

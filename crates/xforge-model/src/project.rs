@@ -2,6 +2,7 @@
 
 use xforge_core::{ObjectId, Registry};
 use std::path::{Path, PathBuf};
+use std::fs;
 
 /// Xcode project
 pub struct Project {
@@ -77,16 +78,425 @@ impl Project {
     pub fn root_id(&self) -> ObjectId {
         self.root_id
     }
+    
+    /// Load a project from a .pbxproj file
+    pub fn load<P: AsRef<Path>>(path: P) -> Result<Self, String> {
+        let path = path.as_ref();
+        
+        // Read file content
+        let content = fs::read_to_string(path)
+            .map_err(|e| format!("Failed to read file: {}", e))?;
+        
+        // Parse the plist
+        let mut parser = xforge_serialization::PlistParser::new(&content);
+        let plist = parser.parse()
+            .map_err(|e| format!("Failed to parse plist: {}", e))?;
+        
+        // Deserialize into registry
+        let (registry, root_id) = xforge_objects::deserialize_registry(&plist)
+            .map_err(|e| format!("Failed to deserialize project: {}", e))?;
+        
+        // Extract metadata from plist
+        let root_dict = plist.as_dictionary()
+            .ok_or("Root value must be a dictionary")?;
+        
+        let archive_version = root_dict.get("archiveVersion")
+            .and_then(|v| v.as_string())
+            .unwrap_or("1")
+            .to_string();
+        
+        let object_version = root_dict.get("objectVersion")
+            .and_then(|v| v.as_string())
+            .unwrap_or("56")
+            .to_string();
+        
+        let project_name = path.file_stem()
+            .and_then(|s| s.to_str())
+            .unwrap_or("Unnamed")
+            .to_string();
+        
+        let metadata = ProjectMetadata {
+            archive_version,
+            object_version,
+            name: project_name,
+            organization: None,
+            development_region: "en".to_string(),
+        };
+        
+        Ok(Self {
+            path: path.to_path_buf(),
+            registry,
+            root_id,
+            metadata,
+        })
+    }
+    
+    /// Save the project to a .pbxproj file
+    pub fn save<P: AsRef<Path>>(&self, path: P) -> Result<(), String> {
+        let path = path.as_ref();
+        
+        // Serialize the registry
+        let root_uuid = self.root_id.to_string();
+        let plist = xforge_objects::serialize_registry(&self.registry, &root_uuid);
+        
+        // Add metadata to plist
+        let mut root_dict = plist.as_dictionary()
+            .ok_or("Serialized value must be a dictionary")?
+            .clone();
+        
+        root_dict.insert(
+            "archiveVersion".to_string(),
+            xforge_serialization::PlistValue::String(self.metadata.archive_version.clone())
+        );
+        
+        root_dict.insert(
+            "objectVersion".to_string(),
+            xforge_serialization::PlistValue::String(self.metadata.object_version.clone())
+        );
+        
+        let final_plist = xforge_serialization::PlistValue::Dictionary(root_dict);
+        
+        // Write to file
+        let mut writer = xforge_serialization::PlistWriter::new();
+        let content = writer.write(&final_plist)
+            .map_err(|e| format!("Failed to write plist: {}", e))?;
+        
+        fs::write(path, content)
+            .map_err(|e| format!("Failed to write file: {}", e))?;
+        
+        Ok(())
+    }
+
+    // === Project Modification APIs ===
+
+    /// Add a file reference to the project
+    /// Returns the Handle to the created PBXFileReference
+    pub fn add_file<P: AsRef<Path>>(&mut self, path: P, source_tree: Option<String>) -> Result<xforge_core::Handle<xforge_objects::PBXFileReference>, String> {
+        use xforge_objects::PBXFileReference;
+        
+        let path_str = path.as_ref().to_string_lossy().to_string();
+        let mut file_ref = PBXFileReference::new(path_str.clone());
+        
+        // Set source tree (default to "<group>")
+        file_ref.source_tree = source_tree.unwrap_or_else(|| "<group>".to_string());
+        
+        // Extract file name for display
+        if let Some(file_name) = path.as_ref().file_name() {
+            file_ref.name = Some(file_name.to_string_lossy().to_string());
+        }
+        
+        // Detect file type based on extension
+        if let Some(ext) = path.as_ref().extension() {
+            let ext_str = ext.to_string_lossy();
+            file_ref.explicit_file_type = match ext_str.as_ref() {
+                "swift" => Some("sourcecode.swift".to_string()),
+                "m" => Some("sourcecode.c.objc".to_string()),
+                "h" => Some("sourcecode.c.h".to_string()),
+                "cpp" | "cc" => Some("sourcecode.cpp.cpp".to_string()),
+                "framework" => Some("wrapper.framework".to_string()),
+                _ => None,
+            };
+        }
+        
+        let handle = self.registry.register(file_ref);
+        Ok(handle)
+    }
+
+    /// Create a new native target in the project
+    /// Returns the Handle to the created PBXNativeTarget
+    pub fn create_target(&mut self, name: String, product_type: xforge_core::ProductType) -> Result<xforge_core::Handle<xforge_objects::PBXNativeTarget>, String> {
+        use xforge_objects::PBXNativeTarget;
+        
+        let mut target = PBXNativeTarget::new(name);
+        target.product_type = Some(product_type);
+        
+        // Create build configuration list
+        let config_list = self.create_configuration_list()?;
+        target.build_configuration_list = Some(*config_list.id());
+        
+        // Create default build phases
+        let sources_phase = self.create_sources_build_phase()?;
+        let frameworks_phase = self.create_frameworks_build_phase()?;
+        let resources_phase = self.create_resources_build_phase()?;
+        
+        target.build_phases.push(*sources_phase.id());
+        target.build_phases.push(*frameworks_phase.id());
+        target.build_phases.push(*resources_phase.id());
+        
+        let handle = self.registry.register(target);
+        
+        // Add target to the root PBXProject
+        if let Some(project_obj) = self.registry.get_mut::<xforge_objects::PBXProject>(&self.root_id) {
+            project_obj.targets.push(*handle.id());
+        }
+        
+        Ok(handle)
+    }
+
+    /// Create a configuration list with Debug and Release configurations
+    fn create_configuration_list(&mut self) -> Result<xforge_core::Handle<xforge_objects::XCConfigurationList>, String> {
+        use xforge_objects::{XCConfigurationList, XCBuildConfiguration};
+        
+        // Create Debug configuration
+        let debug_config = XCBuildConfiguration::new("Debug".to_string());
+        let debug_handle = self.registry.register(debug_config);
+        
+        // Create Release configuration
+        let release_config = XCBuildConfiguration::new("Release".to_string());
+        let release_handle = self.registry.register(release_config);
+        
+        // Create configuration list
+        let mut config_list = XCConfigurationList::new();
+        config_list.build_configurations.push(debug_handle);
+        config_list.build_configurations.push(release_handle);
+        config_list.default_configuration_name = Some("Release".to_string());
+        
+        Ok(self.registry.register(config_list))
+    }
+
+    /// Create an empty sources build phase
+    fn create_sources_build_phase(&mut self) -> Result<xforge_core::Handle<xforge_objects::PBXSourcesBuildPhase>, String> {
+        use xforge_objects::PBXSourcesBuildPhase;
+        Ok(self.registry.register(PBXSourcesBuildPhase::new()))
+    }
+
+    /// Create an empty frameworks build phase
+    fn create_frameworks_build_phase(&mut self) -> Result<xforge_core::Handle<xforge_objects::PBXFrameworksBuildPhase>, String> {
+        use xforge_objects::PBXFrameworksBuildPhase;
+        Ok(self.registry.register(PBXFrameworksBuildPhase::new()))
+    }
+
+    /// Create an empty resources build phase
+    fn create_resources_build_phase(&mut self) -> Result<xforge_core::Handle<xforge_objects::PBXResourcesBuildPhase>, String> {
+        use xforge_objects::PBXResourcesBuildPhase;
+        Ok(self.registry.register(PBXResourcesBuildPhase::new()))
+    }
+
+    /// Add a file to a target's sources build phase
+    pub fn add_file_to_target(
+        &mut self,
+        file_ref: xforge_core::Handle<xforge_objects::PBXFileReference>,
+        target: xforge_core::Handle<xforge_objects::PBXNativeTarget>,
+    ) -> Result<(), String> {
+        use xforge_objects::{PBXBuildFile, PBXSourcesBuildPhase};
+        
+        // Get the sources build phase ID from target (separate scope to release borrow)
+        let sources_phase_id = {
+            let target_obj = self.registry.get::<xforge_objects::PBXNativeTarget>(target.id())
+                .ok_or("Target not found")?;
+            
+            // Find the sources build phase
+            target_obj.build_phases.iter()
+                .find(|&phase_id| {
+                    self.registry.get::<PBXSourcesBuildPhase>(phase_id).is_some()
+                })
+                .copied()
+                .ok_or("No sources build phase found in target")?
+        };
+        
+        // Create a build file
+        let build_file = xforge_objects::PBXBuildFile::new(file_ref);
+        let build_file_handle = self.registry.register(build_file);
+        
+        // Add build file to sources phase
+        if let Some(sources_phase) = self.registry.get_mut::<PBXSourcesBuildPhase>(&sources_phase_id) {
+            sources_phase.files.push(build_file_handle);
+        }
+        
+        Ok(())
+    }
+
+    /// Add a group to organize files
+    pub fn add_group(&mut self, name: String, path: Option<String>) -> Result<xforge_core::Handle<xforge_objects::PBXGroup>, String> {
+        use xforge_objects::PBXGroup;
+        
+        let mut group = PBXGroup::new(name);
+        group.path = path;
+        group.source_tree = "<group>".to_string();
+        
+        Ok(self.registry.register(group))
+    }
+
+    /// Add a file reference to a group
+    pub fn add_file_to_group(
+        &mut self,
+        file_ref: xforge_core::Handle<xforge_objects::PBXFileReference>,
+        group: xforge_core::Handle<xforge_objects::PBXGroup>,
+    ) -> Result<(), String> {
+        if let Some(group_obj) = self.registry.get_mut::<xforge_objects::PBXGroup>(group.id()) {
+            group_obj.children.push(file_ref);
+            Ok(())
+        } else {
+            Err("Group not found".to_string())
+        }
+    }
+
+    /// Update build settings for a configuration
+    pub fn update_build_settings(
+        &mut self,
+        config: xforge_core::Handle<xforge_objects::XCBuildConfiguration>,
+        key: String,
+        value: String,
+    ) -> Result<(), String> {
+        if let Some(config_obj) = self.registry.get_mut::<xforge_objects::XCBuildConfiguration>(config.id()) {
+            config_obj.build_settings.insert(key, value);
+            Ok(())
+        } else {
+            Err("Configuration not found".to_string())
+        }
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use xforge_core::ProductType;
 
     #[test]
     fn test_project_creation() {
         let project = Project::new("TestProject");
         assert_eq!(project.name(), "TestProject");
         assert!(project.registry().is_empty());
+    }
+
+    #[test]
+    fn test_add_file() {
+        let mut project = Project::new("TestProject");
+        
+        // Add a Swift file
+        let file_handle = project.add_file("Sources/main.swift", None)
+            .expect("Failed to add file");
+        
+        // Verify file was added
+        assert_eq!(project.registry().len(), 1);
+        
+        // Verify file reference properties
+        let file_ref = project.registry().get::<xforge_objects::PBXFileReference>(file_handle.id())
+            .expect("File reference not found");
+        assert_eq!(file_ref.path, Some("Sources/main.swift".to_string()));
+        assert_eq!(file_ref.name, Some("main.swift".to_string()));
+        assert_eq!(file_ref.explicit_file_type, Some("sourcecode.swift".to_string()));
+    }
+
+    #[test]
+    fn test_create_target() {
+        let mut project = Project::new("TestProject");
+        
+        // Create a new target
+        let target_handle = project.create_target("MyApp".to_string(), ProductType::Application)
+            .expect("Failed to create target");
+        
+        // Verify target was created with build phases and configurations
+        // Should have: target + 3 build phases + config list + 2 configs = 7 objects
+        assert_eq!(project.registry().len(), 7);
+        
+        // Verify target properties
+        let target = project.registry().get::<xforge_objects::PBXNativeTarget>(target_handle.id())
+            .expect("Target not found");
+        assert_eq!(target.name, "MyApp");
+        assert_eq!(target.product_type, Some(ProductType::Application));
+        assert_eq!(target.build_phases.len(), 3); // sources, frameworks, resources
+    }
+
+    #[test]
+    fn test_add_file_to_group() {
+        let mut project = Project::new("TestProject");
+        
+        // Create a group
+        let group_handle = project.add_group("Sources".to_string(), Some("Sources".to_string()))
+            .expect("Failed to create group");
+        
+        // Add a file
+        let file_handle = project.add_file("main.swift", None)
+            .expect("Failed to add file");
+        
+        // Add file to group
+        project.add_file_to_group(file_handle.clone(), group_handle.clone())
+            .expect("Failed to add file to group");
+        
+        // Verify group contains the file
+        let group = project.registry().get::<xforge_objects::PBXGroup>(group_handle.id())
+            .expect("Group not found");
+        assert_eq!(group.children.len(), 1);
+        assert_eq!(*group.children[0].id(), *file_handle.id());
+    }
+
+    #[test]
+    fn test_add_file_to_target() {
+        let mut project = Project::new("TestProject");
+        
+        // Create target
+        let target_handle = project.create_target("MyApp".to_string(), ProductType::Application)
+            .expect("Failed to create target");
+        
+        // Add a file
+        let file_handle = project.add_file("main.swift", None)
+            .expect("Failed to add file");
+        
+        // Add file to target's build phase
+        project.add_file_to_target(file_handle.clone(), target_handle.clone())
+            .expect("Failed to add file to target");
+        
+        // Verify build file was created and added to sources phase
+        // Initial 7 objects + 1 file + 1 build file = 9
+        assert_eq!(project.registry().len(), 9);
+    }
+
+    #[test]
+    fn test_update_build_settings() {
+        let mut project = Project::new("TestProject");
+        
+        // Create a standalone configuration for testing
+        let config = xforge_objects::XCBuildConfiguration::new("Debug".to_string());
+        let config_handle = project.registry_mut().register(config);
+        
+        // Update build settings
+        project.update_build_settings(config_handle.clone(), "PRODUCT_NAME".to_string(), "MyApp".to_string())
+            .expect("Failed to update build settings");
+        
+        // Verify setting was updated
+        let config = project.registry().get::<xforge_objects::XCBuildConfiguration>(config_handle.id())
+            .expect("Configuration not found");
+        assert_eq!(config.build_settings.get("PRODUCT_NAME"), Some(&"MyApp".to_string()));
+    }
+
+    #[test]
+    fn test_end_to_end_project_modification() {
+        let mut project = Project::new("CompleteTest");
+        
+        // Create a target
+        let target = project.create_target("TestApp".to_string(), ProductType::Application)
+            .expect("Failed to create target");
+        
+        // Create a group
+        let sources_group = project.add_group("Sources".to_string(), Some("Sources".to_string()))
+            .expect("Failed to create group");
+        
+        // Add multiple files
+        let main_file = project.add_file("main.swift", None)
+            .expect("Failed to add main.swift");
+        let helper_file = project.add_file("Helper.swift", None)
+            .expect("Failed to add Helper.swift");
+        
+        // Add files to group
+        project.add_file_to_group(main_file.clone(), sources_group.clone())
+            .expect("Failed to add main to group");
+        project.add_file_to_group(helper_file.clone(), sources_group.clone())
+            .expect("Failed to add helper to group");
+        
+        // Add files to target
+        project.add_file_to_target(main_file.clone(), target.clone())
+            .expect("Failed to add main to target");
+        project.add_file_to_target(helper_file.clone(), target.clone())
+            .expect("Failed to add helper to target");
+        
+        // Verify complete structure
+        // 1 target + 3 build phases + 1 config list + 2 configs + 1 group + 2 files + 2 build files = 12
+        assert_eq!(project.registry().len(), 12);
+        
+        // Verify group structure
+        let group = project.registry().get::<xforge_objects::PBXGroup>(sources_group.id())
+            .expect("Group not found");
+        assert_eq!(group.children.len(), 2);
     }
 }
