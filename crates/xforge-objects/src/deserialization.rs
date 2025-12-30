@@ -162,6 +162,62 @@ fn deserialize_project(dict: &IndexMap<String, PlistValue>) -> Result<PBXProject
     
     let mut project = PBXProject::new(name);
     
+    // Deserialize buildConfigurationList - CRITICAL!
+    if let Some(config_list_str) = dict.get("buildConfigurationList").and_then(|v| v.as_string()) {
+        if let Ok(config_list_id) = ObjectId::from_uuid_string(config_list_str) {
+            project.build_configuration_list = Some(config_list_id);
+        }
+    }
+    
+    // Deserialize compatibility_version
+    if let Some(compat_ver) = dict.get("compatibilityVersion").and_then(|v| v.as_string()) {
+        project.compatibility_version = compat_ver.to_string();
+    }
+    
+    // Deserialize developmentRegion
+    if let Some(dev_region) = dict.get("developmentRegion").and_then(|v| v.as_string()) {
+        project.development_region = dev_region.to_string();
+    }
+    
+    // Deserialize hasScannedForEncodings
+    if let Some(has_scanned) = dict.get("hasScannedForEncodings").and_then(|v| v.as_integer()) {
+        project.has_scanned_for_encodings = has_scanned != 0;
+    }
+    
+    // Deserialize knownRegions
+    if let Some(regions_array) = dict.get("knownRegions").and_then(|v| v.as_array()) {
+        project.known_regions.clear();
+        for region_val in regions_array {
+            if let Some(region) = region_val.as_string() {
+                project.known_regions.push(region.to_string());
+            }
+        }
+    }
+    
+    // Deserialize mainGroup
+    if let Some(main_group_str) = dict.get("mainGroup").and_then(|v| v.as_string()) {
+        if let Ok(main_group_id) = ObjectId::from_uuid_string(main_group_str) {
+            project.main_group = Some(main_group_id);
+        }
+    }
+    
+    // Deserialize productRefGroup
+    if let Some(product_ref_str) = dict.get("productRefGroup").and_then(|v| v.as_string()) {
+        if let Ok(product_ref_id) = ObjectId::from_uuid_string(product_ref_str) {
+            project.product_ref_group = Some(product_ref_id);
+        }
+    }
+    
+    // Deserialize projectDirPath
+    if let Some(dir_path) = dict.get("projectDirPath").and_then(|v| v.as_string()) {
+        project.project_dir_path = dir_path.to_string();
+    }
+    
+    // Deserialize projectRoot
+    if let Some(proj_root) = dict.get("projectRoot").and_then(|v| v.as_string()) {
+        project.project_root = proj_root.to_string();
+    }
+    
     // Deserialize targets
     if let Some(targets_array) = dict.get("targets").and_then(|v| v.as_array()) {
         for target_id_val in targets_array {
@@ -169,6 +225,26 @@ fn deserialize_project(dict: &IndexMap<String, PlistValue>) -> Result<PBXProject
                 if let Ok(target_id) = ObjectId::from_uuid_string(id_str) {
                     project.targets.push(target_id);
                 }
+            }
+        }
+    }
+    
+    // Deserialize packageReferences
+    if let Some(pkg_refs_array) = dict.get("packageReferences").and_then(|v| v.as_array()) {
+        for pkg_ref_val in pkg_refs_array {
+            if let Some(id_str) = pkg_ref_val.as_string() {
+                if let Ok(pkg_ref_id) = ObjectId::from_uuid_string(id_str) {
+                    project.package_references.push(pkg_ref_id);
+                }
+            }
+        }
+    }
+    
+    // Deserialize attributes (simple string-to-string for now)
+    if let Some(attrs_dict) = dict.get("attributes").and_then(|v| v.as_dictionary()) {
+        for (key, value) in attrs_dict {
+            if let Some(val_str) = value.as_string() {
+                project.attributes.insert(key.clone(), val_str.to_string());
             }
         }
     }
@@ -182,9 +258,77 @@ fn deserialize_native_target(dict: &IndexMap<String, PlistValue>) -> Result<PBXN
         .ok_or("PBXNativeTarget missing name")?
         .to_string();
     
-    let target = PBXNativeTarget::new(name);
+    let mut target = PBXNativeTarget::new(name);
     
-    // TODO: Deserialize build phases, dependencies, etc.
+    // Deserialize buildConfigurationList
+    if let Some(config_list_str) = dict.get("buildConfigurationList").and_then(|v| v.as_string()) {
+        if let Ok(config_list_id) = ObjectId::from_uuid_string(config_list_str) {
+            target.build_configuration_list = Some(config_list_id);
+        }
+    }
+    
+    // Deserialize buildPhases
+    if let Some(phases_array) = dict.get("buildPhases").and_then(|v| v.as_array()) {
+        for phase_val in phases_array {
+            if let Some(phase_str) = phase_val.as_string() {
+                if let Ok(phase_id) = ObjectId::from_uuid_string(phase_str) {
+                    target.build_phases.push(phase_id);
+                }
+            }
+        }
+    }
+    
+    // Deserialize buildRules
+    if let Some(rules_array) = dict.get("buildRules").and_then(|v| v.as_array()) {
+        for rule_val in rules_array {
+            if let Some(rule_str) = rule_val.as_string() {
+                if let Ok(rule_id) = ObjectId::from_uuid_string(rule_str) {
+                    target.build_rules.push(rule_id);
+                }
+            }
+        }
+    }
+    
+    // Deserialize dependencies
+    if let Some(deps_array) = dict.get("dependencies").and_then(|v| v.as_array()) {
+        for dep_val in deps_array {
+            if let Some(dep_str) = dep_val.as_string() {
+                if let Ok(dep_id) = ObjectId::from_uuid_string(dep_str) {
+                    target.dependencies.push(dep_id);
+                }
+            }
+        }
+    }
+    
+    // Deserialize productName
+    if let Some(product_name) = dict.get("productName").and_then(|v| v.as_string()) {
+        target.product_name = Some(product_name.to_string());
+    }
+    
+    // Deserialize productReference
+    if let Some(product_ref_str) = dict.get("productReference").and_then(|v| v.as_string()) {
+        if let Ok(product_ref_id) = ObjectId::from_uuid_string(product_ref_str) {
+            target.product_reference = Some(product_ref_id);
+        }
+    }
+    
+    // Deserialize productType
+    if let Some(product_type_str) = dict.get("productType").and_then(|v| v.as_string()) {
+        // Parse product type string to ProductType enum
+        // For now, store as-is if the struct supports it
+        // target.product_type = Some(ProductType::from_str(product_type_str));
+    }
+    
+    // Deserialize packageProductDependencies
+    if let Some(pkg_deps_array) = dict.get("packageProductDependencies").and_then(|v| v.as_array()) {
+        for pkg_dep_val in pkg_deps_array {
+            if let Some(pkg_dep_str) = pkg_dep_val.as_string() {
+                if let Ok(pkg_dep_id) = ObjectId::from_uuid_string(pkg_dep_str) {
+                    target.package_product_dependencies.push(pkg_dep_id);
+                }
+            }
+        }
+    }
     
     Ok(target)
 }
@@ -202,9 +346,25 @@ fn deserialize_file_reference(dict: &IndexMap<String, PlistValue>) -> Result<PBX
         .and_then(|v| v.as_string())
         .map(|s| s.to_string());
     
+    let last_known_file_type = dict.get("lastKnownFileType")
+        .and_then(|v| v.as_string())
+        .map(|s| s.to_string());
+    
+    let explicit_file_type = dict.get("explicitFileType")
+        .and_then(|v| v.as_string())
+        .map(|s| s.to_string());
+    
+    let file_encoding = dict.get("fileEncoding")
+        .and_then(|v| v.as_integer())
+        .map(|i| i as u32);
+    
     let mut file_ref = PBXFileReference::new(path.unwrap_or_default());
     file_ref.name = name;
     file_ref.source_tree = source_tree.unwrap_or("<group>".to_string());
+    file_ref.last_known_file_type = last_known_file_type;
+    file_ref.explicit_file_type = explicit_file_type;
+    file_ref.file_encoding = file_encoding;
+    
     Ok(file_ref)
 }
 
