@@ -4,7 +4,7 @@ use xforge_core::{ObjectId, PBXObject};
 
 #[derive(Debug, Clone)]
 pub struct PBXFileReference {
-    id: ObjectId,
+    pub id: ObjectId,
     pub path: Option<String>,
     pub name: Option<String>,
     pub last_known_file_type: Option<String>,

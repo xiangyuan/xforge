@@ -240,11 +240,11 @@ fn deserialize_project(dict: &IndexMap<String, PlistValue>) -> Result<PBXProject
         }
     }
     
-    // Deserialize attributes (simple string-to-string for now)
-    if let Some(attrs_dict) = dict.get("attributes").and_then(|v| v.as_dictionary()) {
-        for (key, value) in attrs_dict {
-            if let Some(val_str) = value.as_string() {
-                project.attributes.insert(key.clone(), val_str.to_string());
+    // Deserialize attributes (supports nested dictionaries)
+    if let Some(attrs_value) = dict.get("attributes") {
+        if let Some(attrs_dict) = attrs_value.as_dictionary() {
+            for (key, value) in attrs_dict {
+                project.attributes.insert(key.clone(), value.clone());
             }
         }
     }
@@ -314,9 +314,9 @@ fn deserialize_native_target(dict: &IndexMap<String, PlistValue>) -> Result<PBXN
     
     // Deserialize productType
     if let Some(product_type_str) = dict.get("productType").and_then(|v| v.as_string()) {
-        // Parse product type string to ProductType enum
-        // For now, store as-is if the struct supports it
-        // target.product_type = Some(ProductType::from_str(product_type_str));
+        if let Some(product_type) = xforge_core::ProductType::from_string(product_type_str) {
+            target.product_type = Some(product_type);
+        }
     }
     
     // Deserialize packageProductDependencies
@@ -439,15 +439,28 @@ fn deserialize_build_configuration(dict: &IndexMap<String, PlistValue>) -> Resul
     
     if let Some(settings) = dict.get("buildSettings").and_then(|v| v.as_dictionary()) {
         for (key, value) in settings {
-            if let Some(val_str) = value.as_string() {
-                build_settings.insert(key.clone(), val_str.to_string());
-            } else if let Some(arr) = value.as_array() {
-                // Handle array values by joining them
-                let items: Vec<String> = arr.iter()
-                    .filter_map(|v| v.as_string())
-                    .map(|s| s.to_string())
-                    .collect();
-                build_settings.insert(key.clone(), items.join(" "));
+            match value {
+                PlistValue::String(s) => {
+                    build_settings.insert(key.clone(), s.clone());
+                }
+                PlistValue::Boolean(b) => {
+                    // Convert boolean to YES/NO string (Xcode format)
+                    build_settings.insert(key.clone(), if *b { "YES".to_string() } else { "NO".to_string() });
+                }
+                PlistValue::Integer(i) => {
+                    build_settings.insert(key.clone(), i.to_string());
+                }
+                PlistValue::Array(arr) => {
+                    // Handle array values by joining them
+                    let items: Vec<String> = arr.iter()
+                        .filter_map(|v| v.as_string())
+                        .map(|s| s.to_string())
+                        .collect();
+                    build_settings.insert(key.clone(), items.join(" "));
+                }
+                _ => {
+                    // Skip other types (dictionaries, etc.)
+                }
             }
         }
     }

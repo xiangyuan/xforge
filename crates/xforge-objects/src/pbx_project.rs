@@ -1,6 +1,7 @@
 //! PBXProject - The root object of an Xcode project
 
 use xforge_core::{ObjectId, Handle, PBXObject};
+use xforge_serialization::PlistValue;
 use indexmap::IndexMap;
 
 /// PBXProject - Root project object
@@ -20,7 +21,7 @@ pub struct PBXProject {
     pub targets: Vec<ObjectId>,
     pub package_references: Vec<ObjectId>,
     pub project_references: Vec<ProjectReference>,
-    pub attributes: IndexMap<String, String>,
+    pub attributes: IndexMap<String, PlistValue>,
 }
 
 #[derive(Debug, Clone)]

@@ -263,9 +263,17 @@ fn write_dict_flat(output: &mut String, dict: &IndexMap<String, PlistValue>, uui
 
 /// Write dictionary in multiline format
 fn write_dict_multiline(output: &mut String, dict: &IndexMap<String, PlistValue>, indent: usize, uuid_comments: &HashMap<String, String>) -> Result<(), String> {
-    // Sort keys alphabetically (do NOT put isa first - that's not how Xcode does it!)
+    // Sort keys alphabetically, but ALWAYS put 'isa' first (Xcode requirement)
     let mut keys: Vec<&String> = dict.keys().collect();
-    keys.sort();
+    keys.sort_by(|a, b| {
+        if a.as_str() == "isa" {
+            std::cmp::Ordering::Less
+        } else if b.as_str() == "isa" {
+            std::cmp::Ordering::Greater
+        } else {
+            a.cmp(b)
+        }
+    });
     
     for key in keys {
         let value = dict.get(key).unwrap();

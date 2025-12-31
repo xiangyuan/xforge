@@ -175,11 +175,7 @@ pub(crate) fn serialize_project(project: &PBXProject, dict: &mut IndexMap<String
     }
     
     if !project.attributes.is_empty() {
-        let mut attrs = IndexMap::new();
-        for (key, value) in &project.attributes {
-            attrs.insert(key.clone(), PlistValue::String(value.clone()));
-        }
-        dict.insert("attributes".to_string(), PlistValue::Dictionary(attrs));
+        dict.insert("attributes".to_string(), PlistValue::Dictionary(project.attributes.clone()));
     }
 }
 
@@ -287,7 +283,22 @@ pub(crate) fn serialize_build_configuration(config: &XCBuildConfiguration, dict:
     
     let mut settings = IndexMap::new();
     for (key, value) in config.build_settings() {
-        settings.insert(key.clone(), PlistValue::String(value.clone()));
+        // Check if value is in array format: (item1, item2, item3)
+        let trimmed = value.trim();
+        if trimmed.starts_with('(') && trimmed.ends_with(')') {
+            // Parse as array
+            let items_str = &trimmed[1..trimmed.len()-1];
+            let items: Vec<PlistValue> = items_str
+                .split(',')
+                .map(|s| s.trim().trim_matches('"').to_string())
+                .filter(|s| !s.is_empty())
+                .map(|s| PlistValue::String(s))
+                .collect();
+            settings.insert(key.clone(), PlistValue::Array(items));
+        } else {
+            // Regular string value
+            settings.insert(key.clone(), PlistValue::String(value.clone()));
+        }
     }
     dict.insert("buildSettings".to_string(), PlistValue::Dictionary(settings));
 }
@@ -386,7 +397,19 @@ pub(crate) fn serialize_build_file(build_file: &PBXBuildFile, dict: &mut IndexMa
     if let Some(ref settings) = build_file.settings {
         let mut settings_dict = IndexMap::new();
         for (key, value) in settings {
-            settings_dict.insert(key.clone(), PlistValue::String(value.clone()));
+            // ATTRIBUTES field must be an array, not a string
+            if key == "ATTRIBUTES" {
+                // Convert string value to array
+                let items: Vec<PlistValue> = value
+                    .split(',')
+                    .map(|s| s.trim().to_string())
+                    .filter(|s| !s.is_empty())
+                    .map(|s| PlistValue::String(s))
+                    .collect();
+                settings_dict.insert(key.clone(), PlistValue::Array(items));
+            } else {
+                settings_dict.insert(key.clone(), PlistValue::String(value.clone()));
+            }
         }
         dict.insert("settings".to_string(), PlistValue::Dictionary(settings_dict));
     }

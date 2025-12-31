@@ -5,7 +5,7 @@
 
 use xforge_model::{Project, PlistManager, EntitlementsManager};
 use xforge_objects::{PBXNativeTarget, XCBuildConfiguration, PBXProject};
-use xforge_core::{Handle, ObjectId, PBXObject};
+use xforge_core::Handle;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -208,7 +208,15 @@ impl ProjectModsProcessor {
             let mut success_count = 0;
             let mut fail_count = 0;
             
-            for target in targets {
+            // Filter out test targets - only add to main app target and UnityFramework
+            let non_test_targets: Vec<_> = targets.into_iter()
+                .filter(|t| {
+                    let name = self.get_target_name(t);
+                    !name.contains("Test")
+                })
+                .collect();
+            
+            for target in non_test_targets {
                 let target_name = self.get_target_name(&target);
                 for framework in frameworks {
                     let framework_name = format!("{}.framework", framework);
@@ -239,7 +247,15 @@ impl ProjectModsProcessor {
             let mut success_count = 0;
             let mut fail_count = 0;
             
-            for target in targets {
+            // Filter out test targets
+            let non_test_targets: Vec<_> = targets.into_iter()
+                .filter(|t| {
+                    let name = self.get_target_name(t);
+                    !name.contains("Test")
+                })
+                .collect();
+            
+            for target in non_test_targets {
                 let target_name = self.get_target_name(&target);
                 for framework in weak_frameworks {
                     let framework_name = format!("{}.framework", framework);
@@ -507,6 +523,17 @@ impl ProjectModsProcessor {
             
             for (key, value) in plist_updates {
                 println!("   ✓ Setting {} = {:?}", key, value);
+                
+                // Special handling for keys that must be arrays
+                if key == "UIBackgroundModes" {
+                    if let serde_json::Value::String(s) = value {
+                        // Convert string to array - UIBackgroundModes must be array
+                        // Use add_to_array which creates the array and adds the item
+                        plist.add_to_array(key, s);
+                        continue;
+                    }
+                }
+                
                 // Convert serde_json::Value to appropriate plist value
                 match value {
                     serde_json::Value::String(s) => plist.set_string(key, s),
