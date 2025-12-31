@@ -61,7 +61,7 @@ pub fn serialize_registry(registry: &Registry, root_project_id: &str) -> PlistVa
 }
 
 /// Serialize a single PBX object
-fn serialize_object(obj: &dyn PBXObject, _registry: &Registry) -> Option<PlistValue> {
+pub(crate) fn serialize_object(obj: &dyn PBXObject, _registry: &Registry) -> Option<PlistValue> {
     let mut dict = IndexMap::new();
     
     // Add isa field
@@ -123,7 +123,7 @@ fn serialize_object(obj: &dyn PBXObject, _registry: &Registry) -> Option<PlistVa
     Some(PlistValue::Dictionary(dict))
 }
 
-fn serialize_project(project: &PBXProject, dict: &mut IndexMap<String, PlistValue>) {
+pub(crate) fn serialize_project(project: &PBXProject, dict: &mut IndexMap<String, PlistValue>) {
     dict.insert("compatibilityVersion".to_string(), PlistValue::String(project.compatibility_version().to_string()));
     dict.insert("developmentRegion".to_string(), PlistValue::String(project.development_region().to_string()));
     
@@ -183,7 +183,7 @@ fn serialize_project(project: &PBXProject, dict: &mut IndexMap<String, PlistValu
     }
 }
 
-fn serialize_target(target: &PBXNativeTarget, dict: &mut IndexMap<String, PlistValue>) {
+pub(crate) fn serialize_target(target: &PBXNativeTarget, dict: &mut IndexMap<String, PlistValue>) {
     dict.insert("name".to_string(), PlistValue::String(target.name().to_string()));
     
     if let Some(product_name) = target.product_name() {
@@ -234,7 +234,7 @@ fn serialize_target(target: &PBXNativeTarget, dict: &mut IndexMap<String, PlistV
     }
 }
 
-fn serialize_file_reference(file_ref: &PBXFileReference, dict: &mut IndexMap<String, PlistValue>) {
+pub(crate) fn serialize_file_reference(file_ref: &PBXFileReference, dict: &mut IndexMap<String, PlistValue>) {
     if let Some(path) = file_ref.path() {
         dict.insert("path".to_string(), PlistValue::String(path.to_string()));
     }
@@ -261,7 +261,7 @@ fn serialize_file_reference(file_ref: &PBXFileReference, dict: &mut IndexMap<Str
     }
 }
 
-fn serialize_group(group: &PBXGroup, dict: &mut IndexMap<String, PlistValue>) {
+pub(crate) fn serialize_group(group: &PBXGroup, dict: &mut IndexMap<String, PlistValue>) {
     if let Some(path) = group.path() {
         dict.insert("path".to_string(), PlistValue::String(path.to_string()));
     }
@@ -282,7 +282,7 @@ fn serialize_group(group: &PBXGroup, dict: &mut IndexMap<String, PlistValue>) {
     dict.insert("children".to_string(), PlistValue::Array(children));
 }
 
-fn serialize_build_configuration(config: &XCBuildConfiguration, dict: &mut IndexMap<String, PlistValue>) {
+pub(crate) fn serialize_build_configuration(config: &XCBuildConfiguration, dict: &mut IndexMap<String, PlistValue>) {
     dict.insert("name".to_string(), PlistValue::String(config.name().to_string()));
     
     let mut settings = IndexMap::new();
@@ -292,7 +292,7 @@ fn serialize_build_configuration(config: &XCBuildConfiguration, dict: &mut Index
     dict.insert("buildSettings".to_string(), PlistValue::Dictionary(settings));
 }
 
-fn serialize_configuration_list(config_list: &XCConfigurationList, dict: &mut IndexMap<String, PlistValue>) {
+pub(crate) fn serialize_configuration_list(config_list: &XCConfigurationList, dict: &mut IndexMap<String, PlistValue>) {
     let configs: Vec<PlistValue> = config_list.build_configurations()
         .iter()
         .map(|h| PlistValue::String(h.to_string()))
@@ -307,7 +307,7 @@ fn serialize_configuration_list(config_list: &XCConfigurationList, dict: &mut In
         PlistValue::Integer(if config_list.default_configuration_is_visible() { 1 } else { 0 }));
 }
 
-fn serialize_build_phase_common(
+pub(crate) fn serialize_build_phase_common(
     files: &[Handle<PBXBuildFile>],
     build_action_mask: u32,
     run_only: bool,
@@ -325,7 +325,7 @@ fn serialize_build_phase_common(
         PlistValue::Integer(if run_only { 1 } else { 0 }));
 }
 
-fn serialize_shell_script_phase(shell: &PBXShellScriptBuildPhase, dict: &mut IndexMap<String, PlistValue>) {
+pub(crate) fn serialize_shell_script_phase(shell: &PBXShellScriptBuildPhase, dict: &mut IndexMap<String, PlistValue>) {
     serialize_build_phase_common(
         &shell.files,
         shell.build_action_mask,
@@ -355,7 +355,7 @@ fn serialize_shell_script_phase(shell: &PBXShellScriptBuildPhase, dict: &mut Ind
     }
 }
 
-fn serialize_copy_files_phase(copy: &PBXCopyFilesBuildPhase, dict: &mut IndexMap<String, PlistValue>) {
+pub(crate) fn serialize_copy_files_phase(copy: &PBXCopyFilesBuildPhase, dict: &mut IndexMap<String, PlistValue>) {
     serialize_build_phase_common(
         &copy.files,
         copy.build_action_mask,
@@ -371,7 +371,7 @@ fn serialize_copy_files_phase(copy: &PBXCopyFilesBuildPhase, dict: &mut IndexMap
     dict.insert("dstPath".to_string(), PlistValue::String(copy.dst_path.clone()));
 }
 
-fn serialize_headers_phase(headers: &PBXHeadersBuildPhase, dict: &mut IndexMap<String, PlistValue>) {
+pub(crate) fn serialize_headers_phase(headers: &PBXHeadersBuildPhase, dict: &mut IndexMap<String, PlistValue>) {
     serialize_build_phase_common(
         &headers.files,
         headers.build_action_mask,
@@ -380,7 +380,7 @@ fn serialize_headers_phase(headers: &PBXHeadersBuildPhase, dict: &mut IndexMap<S
     );
 }
 
-fn serialize_build_file(build_file: &PBXBuildFile, dict: &mut IndexMap<String, PlistValue>) {
+pub(crate) fn serialize_build_file(build_file: &PBXBuildFile, dict: &mut IndexMap<String, PlistValue>) {
     dict.insert("fileRef".to_string(), PlistValue::String(build_file.file_ref.to_string()));
     
     if let Some(ref settings) = build_file.settings {
@@ -392,7 +392,7 @@ fn serialize_build_file(build_file: &PBXBuildFile, dict: &mut IndexMap<String, P
     }
 }
 
-fn serialize_container_item_proxy(proxy: &PBXContainerItemProxy, dict: &mut IndexMap<String, PlistValue>) {
+pub(crate) fn serialize_container_item_proxy(proxy: &PBXContainerItemProxy, dict: &mut IndexMap<String, PlistValue>) {
     dict.insert("containerPortal".to_string(), PlistValue::String(proxy.container_portal.to_string()));
     
     dict.insert("proxyType".to_string(), PlistValue::Integer(proxy.proxy_type as i64));
@@ -406,7 +406,7 @@ fn serialize_container_item_proxy(proxy: &PBXContainerItemProxy, dict: &mut Inde
     }
 }
 
-fn serialize_target_dependency(dependency: &PBXTargetDependency, dict: &mut IndexMap<String, PlistValue>) {
+pub(crate) fn serialize_target_dependency(dependency: &PBXTargetDependency, dict: &mut IndexMap<String, PlistValue>) {
     if let Some(ref target) = dependency.target {
         dict.insert("target".to_string(), PlistValue::String(target.to_string()));
     }
@@ -420,7 +420,7 @@ fn serialize_target_dependency(dependency: &PBXTargetDependency, dict: &mut Inde
     }
 }
 
-fn serialize_variant_group(variant_group: &PBXVariantGroup, dict: &mut IndexMap<String, PlistValue>) {
+pub(crate) fn serialize_variant_group(variant_group: &PBXVariantGroup, dict: &mut IndexMap<String, PlistValue>) {
     if let Some(ref name) = variant_group.name {
         dict.insert("name".to_string(), PlistValue::String(name.clone()));
     }
@@ -434,7 +434,7 @@ fn serialize_variant_group(variant_group: &PBXVariantGroup, dict: &mut IndexMap<
     dict.insert("sourceTree".to_string(), PlistValue::String(variant_group.source_tree.clone()));
 }
 
-fn serialize_reference_proxy(ref_proxy: &PBXReferenceProxy, dict: &mut IndexMap<String, PlistValue>) {
+pub(crate) fn serialize_reference_proxy(ref_proxy: &PBXReferenceProxy, dict: &mut IndexMap<String, PlistValue>) {
     dict.insert("path".to_string(), PlistValue::String(ref_proxy.path.clone()));
     dict.insert("fileType".to_string(), PlistValue::String(ref_proxy.file_type.clone()));
     dict.insert("remoteRef".to_string(), PlistValue::String(ref_proxy.remote_ref.to_string()));
@@ -442,12 +442,12 @@ fn serialize_reference_proxy(ref_proxy: &PBXReferenceProxy, dict: &mut IndexMap<
     dict.insert("sourceTree".to_string(), PlistValue::String(ref_proxy.source_tree.clone()));
 }
 
-fn serialize_swift_package_product_dependency(swift_product: &XCSwiftPackageProductDependency, dict: &mut IndexMap<String, PlistValue>) {
+pub(crate) fn serialize_swift_package_product_dependency(swift_product: &XCSwiftPackageProductDependency, dict: &mut IndexMap<String, PlistValue>) {
     dict.insert("productName".to_string(), PlistValue::String(swift_product.product_name.clone()));
     dict.insert("package".to_string(), PlistValue::String(swift_product.package.to_string()));
 }
 
-fn serialize_remote_swift_package_reference(swift_ref: &XCRemoteSwiftPackageReference, dict: &mut IndexMap<String, PlistValue>) {
+pub(crate) fn serialize_remote_swift_package_reference(swift_ref: &XCRemoteSwiftPackageReference, dict: &mut IndexMap<String, PlistValue>) {
     dict.insert("repositoryURL".to_string(), PlistValue::String(swift_ref.repository_url.clone()));
     
     let mut req_dict = IndexMap::new();
@@ -497,7 +497,7 @@ mod tests {
     }
 }
 
-fn serialize_aggregate_target(target: &PBXAggregateTarget, dict: &mut IndexMap<String, PlistValue>) {
+pub(crate) fn serialize_aggregate_target(target: &PBXAggregateTarget, dict: &mut IndexMap<String, PlistValue>) {
     dict.insert("name".to_string(), PlistValue::String(target.name().to_string()));
     
     if let Some(product_name) = target.product_name() {
@@ -521,7 +521,7 @@ fn serialize_aggregate_target(target: &PBXAggregateTarget, dict: &mut IndexMap<S
     dict.insert("dependencies".to_string(), PlistValue::Array(deps));
 }
 
-fn serialize_legacy_target(target: &PBXLegacyTarget, dict: &mut IndexMap<String, PlistValue>) {
+pub(crate) fn serialize_legacy_target(target: &PBXLegacyTarget, dict: &mut IndexMap<String, PlistValue>) {
     dict.insert("name".to_string(), PlistValue::String(target.name().to_string()));
     
     if let Some(product_name) = target.product_name() {
@@ -552,7 +552,7 @@ fn serialize_legacy_target(target: &PBXLegacyTarget, dict: &mut IndexMap<String,
     dict.insert("dependencies".to_string(), PlistValue::Array(deps));
 }
 
-fn serialize_version_group(group: &XCVersionGroup, dict: &mut IndexMap<String, PlistValue>) {
+pub(crate) fn serialize_version_group(group: &XCVersionGroup, dict: &mut IndexMap<String, PlistValue>) {
     dict.insert("path".to_string(), PlistValue::String(group.path().to_string()));
     dict.insert("sourceTree".to_string(), PlistValue::String(group.source_tree().to_string()));
     
@@ -569,7 +569,7 @@ fn serialize_version_group(group: &XCVersionGroup, dict: &mut IndexMap<String, P
     dict.insert("versionGroupType".to_string(), PlistValue::String(group.version_group_type().to_string()));
 }
 
-fn serialize_file_system_exception_set(exception_set: &PBXFileSystemSynchronizedBuildFileExceptionSet, dict: &mut IndexMap<String, PlistValue>) {
+pub(crate) fn serialize_file_system_exception_set(exception_set: &PBXFileSystemSynchronizedBuildFileExceptionSet, dict: &mut IndexMap<String, PlistValue>) {
     // Serialize membershipExceptions array
     if !exception_set.membership_exceptions.is_empty() {
         let exceptions: Vec<PlistValue> = exception_set.membership_exceptions
@@ -585,7 +585,7 @@ fn serialize_file_system_exception_set(exception_set: &PBXFileSystemSynchronized
     }
 }
 
-fn serialize_file_system_synchronized_group(sync_group: &PBXFileSystemSynchronizedRootGroup, dict: &mut IndexMap<String, PlistValue>) {
+pub(crate) fn serialize_file_system_synchronized_group(sync_group: &PBXFileSystemSynchronizedRootGroup, dict: &mut IndexMap<String, PlistValue>) {
     // Serialize path
     if let Some(path) = &sync_group.path {
         dict.insert("path".to_string(), PlistValue::String(path.clone()));

@@ -110,18 +110,27 @@ impl Project {
             .unwrap_or("56")
             .to_string();
         
-        let project_name = path.file_stem()
-            .and_then(|s| s.to_str())
+        // Get project name from .xcodeproj directory name
+        // Path is typically: /path/to/ProjectName.xcodeproj/project.pbxproj
+        let project_name = path.parent()
+            .and_then(|parent| parent.file_stem())
+            .and_then(|stem| stem.to_str())
             .unwrap_or("Unnamed")
             .to_string();
         
         let metadata = ProjectMetadata {
             archive_version,
             object_version,
-            name: project_name,
+            name: project_name.clone(),
             organization: None,
             development_region: "en".to_string(),
         };
+        
+        // Update PBXProject object's name field
+        let mut registry = registry;
+        if let Some(project) = registry.get_mut::<xforge_objects::PBXProject>(&root_id) {
+            project.name = project_name;
+        }
         
         Ok(Self {
             path: path.to_path_buf(),
@@ -135,31 +144,9 @@ impl Project {
     pub fn save<P: AsRef<Path>>(&self, path: P) -> Result<(), String> {
         let path = path.as_ref();
         
-        // Serialize the registry
+        // Use Xcode-specific writer with proper formatting
         let root_uuid = self.root_id.to_string();
-        let plist = xforge_objects::serialize_registry(&self.registry, &root_uuid);
-        
-        // Add metadata to plist
-        let mut root_dict = plist.as_dictionary()
-            .ok_or("Serialized value must be a dictionary")?
-            .clone();
-        
-        root_dict.insert(
-            "archiveVersion".to_string(),
-            xforge_serialization::PlistValue::String(self.metadata.archive_version.clone())
-        );
-        
-        root_dict.insert(
-            "objectVersion".to_string(),
-            xforge_serialization::PlistValue::String(self.metadata.object_version.clone())
-        );
-        
-        let final_plist = xforge_serialization::PlistValue::Dictionary(root_dict);
-        
-        // Write to file
-        let mut writer = xforge_serialization::PlistWriter::new();
-        let content = writer.write(&final_plist)
-            .map_err(|e| format!("Failed to write plist: {}", e))?;
+        let content = xforge_objects::xcode_writer::write_xcode_project(&self.registry, &root_uuid)?;
         
         fs::write(path, content)
             .map_err(|e| format!("Failed to write file: {}", e))?;
