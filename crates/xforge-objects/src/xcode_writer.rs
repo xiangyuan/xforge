@@ -91,11 +91,19 @@ fn get_build_file_comment_with_phase(build_file_id: &str, obj: &dyn PBXObject, r
     let any_obj = obj as &dyn Any;
     
     if let Some(build_file) = any_obj.downcast_ref::<PBXBuildFile>() {
-        // Get the file name
+        // Get the file name from fileRef (could be PBXFileReference or PBXVariantGroup)
         if let Ok(file_ref_id) = xforge_core::ObjectId::from_uuid_string(&build_file.file_ref.to_string()) {
-            if let Some(file_ref) = registry.get::<PBXFileReference>(&file_ref_id) {
-                let filename = file_ref.name.clone().or_else(|| file_ref.path.clone())?;
-                
+            // Try PBXFileReference first
+            let filename = if let Some(file_ref) = registry.get::<PBXFileReference>(&file_ref_id) {
+                file_ref.name.clone().or_else(|| file_ref.path.clone())
+            } else if let Some(variant_group) = registry.get::<PBXVariantGroup>(&file_ref_id) {
+                // Handle PBXVariantGroup (like InfoPlist.strings)
+                variant_group.name.clone()
+            } else {
+                None
+            };
+            
+            if let Some(filename) = filename {
                 // Find which build phase this build file belongs to
                 if let Some(phase_name) = find_build_phase_for_file(build_file_id, registry) {
                     return Some(format!("{} in {}", filename, phase_name));
@@ -446,7 +454,16 @@ fn get_object_comment(obj: &dyn PBXObject, registry: &Registry) -> Option<String
     } else if let Some(_) = any_obj.downcast_ref::<PBXHeadersBuildPhase>() {
         return Some("Headers".to_string());
     } else if let Some(copy) = any_obj.downcast_ref::<PBXCopyFilesBuildPhase>() {
-        return copy.name.clone().or_else(|| Some("Embed Frameworks".to_string()));
+        // Return name if present, otherwise determine by dstSubfolderSpec
+        return copy.name.clone().or_else(|| {
+            // dstSubfolderSpec = 10 means "Frameworks" subfolder (Embed Frameworks)
+            // dstSubfolderSpec = 0 or other values default to "CopyFiles"
+            if copy.dst_subfolder_spec == 10 {
+                Some("Embed Frameworks".to_string())
+            } else {
+                Some("CopyFiles".to_string())
+            }
+        });
     } else if let Some(shell) = any_obj.downcast_ref::<PBXShellScriptBuildPhase>() {
         return shell.name.clone().or_else(|| Some("ShellScript".to_string()));
     } else if let Some(variant) = any_obj.downcast_ref::<PBXVariantGroup>() {
