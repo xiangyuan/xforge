@@ -249,9 +249,9 @@ impl RegistryExt for Registry {
     fn find_file_in_group(&self, group_id: &ObjectId, path: &str) -> QueryResult<ObjectId> {
         if let Some(group) = self.get::<PBXGroup>(group_id) {
             for child in group.children() {
-                if let Some(file_ref) = self.get::<PBXFileReference>(child.id()) {
+                if let Some(file_ref) = self.get::<PBXFileReference>(child) {
                     if file_ref.path() == Some(path) {
-                        return Ok(child.id().clone());
+                        return Ok(child.clone());
                     }
                 }
             }
@@ -276,9 +276,9 @@ impl RegistryExt for Registry {
             if let Some(group) = self.get::<PBXGroup>(&current_group_id) {
                 let mut found = false;
                 for child in group.children() {
-                    if let Some(child_group) = self.get::<PBXGroup>(child.id()) {
+                    if let Some(child_group) = self.get::<PBXGroup>(child) {
                         if child_group.path() == Some(component) {
-                            current_group_id = child.id().clone();
+                            current_group_id = child.clone();
                             found = true;
                             break;
                         }
@@ -297,7 +297,7 @@ impl RegistryExt for Registry {
 
     fn get_group_children(&self, group_id: &ObjectId) -> QueryResult<Vec<ObjectId>> {
         if let Some(group) = self.get::<PBXGroup>(group_id) {
-            Ok(group.children().iter().map(|h| h.id().clone()).collect())
+            Ok(group.children().to_vec())
         } else {
             Err(QueryError::GroupNotFound(group_id.to_string()))
         }
@@ -362,15 +362,15 @@ impl RegistryExt for Registry {
         
         if let Some(group) = self.get::<PBXGroup>(group_id) {
             for child in group.children() {
-                if let Some(file_ref) = self.get::<PBXFileReference>(child.id()) {
+                if let Some(file_ref) = self.get::<PBXFileReference>(child) {
                     if let Some(path) = file_ref.path() {
                         if path.ends_with(&format!(".{}", extension)) {
-                            result.push(child.id().clone());
+                            result.push(child.clone());
                         }
                     }
                 }
-                if self.get::<PBXGroup>(child.id()).is_some() {
-                    if let Ok(mut subfiles) = self.find_files_by_extension(child.id(), extension) {
+                if self.get::<PBXGroup>(child).is_some() {
+                    if let Ok(mut subfiles) = self.find_files_by_extension(child, extension) {
                         result.append(&mut subfiles);
                     }
                 }

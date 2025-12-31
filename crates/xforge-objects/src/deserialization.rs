@@ -383,12 +383,12 @@ fn deserialize_group(dict: &IndexMap<String, PlistValue>) -> Result<PBXGroup, St
     
     let mut children = Vec::new();
     
-    // Deserialize children
+    // Deserialize children (ObjectIds, not Handles - can be any type)
     if let Some(children_array) = dict.get("children").and_then(|v| v.as_array()) {
         for child_id_val in children_array {
             if let Some(id_str) = child_id_val.as_string() {
                 if let Ok(child_id) = ObjectId::from_uuid_string(id_str) {
-                    children.push(Handle::from_id(child_id));
+                    children.push(child_id);
                 }
             }
         }

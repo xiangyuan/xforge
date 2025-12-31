@@ -7,7 +7,7 @@ pub struct PBXGroup {
     id: ObjectId,
     pub name: Option<String>,
     pub path: Option<String>,
-    pub children: Vec<Handle<PBXFileReference>>,
+    pub children: Vec<ObjectId>,  // Changed from Vec<Handle<PBXFileReference>> to support any child type
     pub source_tree: String,
 }
 
@@ -30,11 +30,11 @@ impl PBXGroup {
         Some(&self.source_tree)
     }
     
-    pub fn children(&self) -> &[Handle<PBXFileReference>] {
+    pub fn children(&self) -> &[ObjectId] {
         &self.children
     }
     
-    pub fn add_child(&mut self, child: Handle<PBXFileReference>) {
+    pub fn add_child(&mut self, child: ObjectId) {
         self.children.push(child);
     }
 }

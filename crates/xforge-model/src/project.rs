@@ -173,9 +173,10 @@ impl Project {
         }
         
         // Detect file type based on extension
+        // Use last_known_file_type (not explicit_file_type) to match Xcode's format
         if let Some(ext) = path.as_ref().extension() {
             let ext_str = ext.to_string_lossy();
-            file_ref.explicit_file_type = match ext_str.as_ref() {
+            file_ref.last_known_file_type = match ext_str.as_ref() {
                 "swift" => Some("sourcecode.swift".to_string()),
                 "m" => Some("sourcecode.c.objc".to_string()),
                 "h" => Some("sourcecode.c.h".to_string()),
@@ -311,7 +312,7 @@ impl Project {
         group: xforge_core::Handle<xforge_objects::PBXGroup>,
     ) -> Result<(), String> {
         if let Some(group_obj) = self.registry.get_mut::<xforge_objects::PBXGroup>(group.id()) {
-            group_obj.children.push(file_ref);
+            group_obj.children.push(*file_ref.id());
             Ok(())
         } else {
             Err("Group not found".to_string())
@@ -339,12 +340,15 @@ impl Project {
     fn find_file_reference(&self, path: &str) -> Option<xforge_core::Handle<xforge_objects::PBXFileReference>> {
         use xforge_objects::PBXFileReference;
         
-        // Search all file references in the registry by iterating through all objects
-        for (_, obj) in self.registry.iter() {
+        // Search all file references in the registry
+        // IMPORTANT: Use the registry key (String UUID), convert to ObjectId
+        for (registry_key, obj) in self.registry.iter() {
             if let Some(file_ref) = obj.as_any().downcast_ref::<PBXFileReference>() {
                 if file_ref.path.as_deref() == Some(path) {
-                    // Access the id field directly from PBXFileReference
-                    return Some(xforge_core::Handle::from_id(file_ref.id));
+                    // Convert registry key (String) to ObjectId
+                    if let Ok(object_id) = xforge_core::ObjectId::from_uuid_string(registry_key) {
+                        return Some(xforge_core::Handle::from_id(object_id));
+                    }
                 }
             }
         }
@@ -371,9 +375,9 @@ impl Project {
         // Find or create Frameworks group and add the framework to it
         let frameworks_group_id = self.find_or_create_frameworks_group()?;
         if let Some(group) = self.registry.get_mut::<PBXGroup>(&frameworks_group_id) {
-            // Check if not already in group (PBXGroup.children are Handles, not ObjectIds)
-            if !group.children.iter().any(|h| h.id() == file_ref.id()) {
-                group.children.push(file_ref.clone());
+            // Check if not already in group (children are now ObjectIds, not Handles)
+            if !group.children.iter().any(|id| id == file_ref.id()) {
+                group.children.push(*file_ref.id());
             }
         }
         
@@ -432,10 +436,10 @@ impl Project {
         
         // Try to find existing Frameworks group in main group's children
         if let Some(main_group) = self.registry.get::<PBXGroup>(&main_group_id) {
-            for child_handle in &main_group.children {
-                if let Some(child_group) = self.registry.get::<PBXGroup>(child_handle.id()) {
+            for child_id in &main_group.children {
+                if let Some(child_group) = self.registry.get::<PBXGroup>(child_id) {
                     if child_group.name.as_deref() == Some("Frameworks") {
-                        return Ok(child_handle.id().clone());
+                        return Ok(child_id.clone());
                     }
                 }
             }
@@ -446,10 +450,10 @@ impl Project {
         let frameworks_group_handle = self.registry.register(frameworks_group);
         let frameworks_group_id = frameworks_group_handle.id().clone();
         
-        // Add to main group (need to cast Handle to Handle<PBXFileReference>)
-        // Actually, PBXGroup can only contain PBXFileReference handles, but we're adding a PBXGroup
-        // This is a type issue - PBXGroup.children should be Vec<ObjectId> not Vec<Handle<PBXFileReference>>
-        // For now, we'll skip adding to main group as it will be recovered by Xcode
+        // Add to main group (children are now ObjectIds, supporting any child type)
+        if let Some(main_group) = self.registry.get_mut::<PBXGroup>(&main_group_id) {
+            main_group.children.push(frameworks_group_id.clone());
+        }
         
         Ok(frameworks_group_id)
     }

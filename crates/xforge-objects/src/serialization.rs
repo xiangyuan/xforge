@@ -273,7 +273,7 @@ pub(crate) fn serialize_group(group: &PBXGroup, dict: &mut IndexMap<String, Plis
     
     let children: Vec<PlistValue> = group.children()
         .iter()
-        .map(|h| PlistValue::String(h.to_string()))
+        .map(|object_id| PlistValue::String(object_id.to_uuid_string()))
         .collect();
     dict.insert("children".to_string(), PlistValue::Array(children));
 }
