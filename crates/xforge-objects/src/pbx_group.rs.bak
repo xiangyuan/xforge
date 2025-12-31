@@ -1,6 +1,6 @@
 //! PBXGroup - File groups
 
-use xforge_core::{ObjectId, PBXObject};
+use xforge_core::{ObjectId, Handle, PBXObject};
 
 #[derive(Debug, Clone)]
 pub struct PBXGroup {
@@ -44,10 +44,6 @@ impl PBXObject for PBXGroup {
         "PBXGroup"
     }
 
-    fn id(&self) -> &ObjectId {
-        &self.id
-    }
-
     fn as_any(&self) -> &dyn std::any::Any {
         self
     }
@@ -58,3 +54,4 @@ impl PBXObject for PBXGroup {
 
 }
 
+use crate::PBXFileReference;

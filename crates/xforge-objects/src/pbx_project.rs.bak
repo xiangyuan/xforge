@@ -1,6 +1,6 @@
 //! PBXProject - The root object of an Xcode project
 
-use xforge_core::{ObjectId, PBXObject};
+use xforge_core::{ObjectId, Handle, PBXObject};
 use xforge_serialization::PlistValue;
 use indexmap::IndexMap;
 
@@ -75,10 +75,6 @@ impl PBXProject {
 impl PBXObject for PBXProject {
     fn isa(&self) -> &'static str {
         "PBXProject"
-    }
-
-    fn id(&self) -> &ObjectId {
-        &self.id
     }
 
     fn as_any(&self) -> &dyn std::any::Any {

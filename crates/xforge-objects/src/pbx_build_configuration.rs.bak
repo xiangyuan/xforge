@@ -111,10 +111,6 @@ impl PBXObject for XCBuildConfiguration {
         "XCBuildConfiguration"
     }
 
-    fn id(&self) -> &ObjectId {
-        &self.id
-    }
-
     fn as_any(&self) -> &dyn std::any::Any {
         self
     }
@@ -173,10 +169,6 @@ impl Default for XCConfigurationList {
 impl PBXObject for XCConfigurationList {
     fn isa(&self) -> &'static str {
         "XCConfigurationList"
-    }
-
-    fn id(&self) -> &ObjectId {
-        &self.id
     }
 
     fn as_any(&self) -> &dyn std::any::Any {

@@ -17,9 +17,8 @@ impl Registry {
     }
     
     /// Register an object and return a handle
-    /// Now uses the object's own ID instead of generating a new one
     pub fn register<T: PBXObject + 'static>(&mut self, object: T) -> Handle<T> {
-        let id = object.id().clone();  // Use object's own ID
+        let id = ObjectId::generate();
         let handle = Handle::from_id(id.clone());
         self.objects.insert(id.to_uuid_string(), Box::new(object));
         handle

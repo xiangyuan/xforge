@@ -40,10 +40,6 @@ impl PBXObject for PBXFileReference {
         "PBXFileReference"
     }
 
-    fn id(&self) -> &ObjectId {
-        &self.id
-    }
-
     fn as_any(&self) -> &dyn std::any::Any {
         self
     }

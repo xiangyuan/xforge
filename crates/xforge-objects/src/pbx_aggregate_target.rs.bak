@@ -74,10 +74,6 @@ impl PBXObject for PBXAggregateTarget {
         "PBXAggregateTarget"
     }
 
-    fn id(&self) -> &ObjectId {
-        &self.id
-    }
-
     fn as_any(&self) -> &dyn std::any::Any {
         self
     }

@@ -25,10 +25,6 @@ impl PBXObject for PBXFileSystemSynchronizedBuildFileExceptionSet {
         "PBXFileSystemSynchronizedBuildFileExceptionSet"
     }
 
-    fn id(&self) -> &ObjectId {
-        &self.id
-    }
-
     fn as_any(&self) -> &dyn std::any::Any {
         self
     }
@@ -61,10 +57,6 @@ impl PBXFileSystemSynchronizedRootGroup {
 impl PBXObject for PBXFileSystemSynchronizedRootGroup {
     fn isa(&self) -> &'static str {
         "PBXFileSystemSynchronizedRootGroup"
-    }
-
-    fn id(&self) -> &ObjectId {
-        &self.id
     }
 
     fn as_any(&self) -> &dyn std::any::Any {

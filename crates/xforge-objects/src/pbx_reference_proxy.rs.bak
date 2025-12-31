@@ -29,10 +29,6 @@ impl PBXObject for PBXReferenceProxy {
         "PBXReferenceProxy"
     }
 
-    fn id(&self) -> &ObjectId {
-        &self.id
-    }
-
     fn as_any(&self) -> &dyn std::any::Any {
         self
     }

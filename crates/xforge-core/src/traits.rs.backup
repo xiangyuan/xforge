@@ -1,14 +1,9 @@
 //! Common traits for PBX objects
 
-use crate::ObjectId;
-
 /// Trait for all PBX objects
 pub trait PBXObject: std::any::Any + std::fmt::Debug {
     /// Get the ISA type name
     fn isa(&self) -> &'static str;
-    
-    /// Get the object's unique ID
-    fn id(&self) -> &ObjectId;
     
     /// Get the object name (if any)
     fn name(&self) -> Option<&str> {

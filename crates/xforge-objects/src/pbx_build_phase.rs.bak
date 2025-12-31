@@ -31,10 +31,6 @@ impl PBXObject for PBXSourcesBuildPhase {
         "PBXSourcesBuildPhase"
     }
 
-    fn id(&self) -> &ObjectId {
-        &self.id
-    }
-
     fn as_any(&self) -> &dyn std::any::Any {
         self
     }
@@ -80,10 +76,6 @@ impl PBXObject for PBXFrameworksBuildPhase {
         "PBXFrameworksBuildPhase"
     }
 
-    fn id(&self) -> &ObjectId {
-        &self.id
-    }
-
     fn as_any(&self) -> &dyn std::any::Any {
         self
     }
@@ -127,10 +119,6 @@ impl PBXResourcesBuildPhase {
 impl PBXObject for PBXResourcesBuildPhase {
     fn isa(&self) -> &'static str {
         "PBXResourcesBuildPhase"
-    }
-
-    fn id(&self) -> &ObjectId {
-        &self.id
     }
 
     fn as_any(&self) -> &dyn std::any::Any {
@@ -197,10 +185,6 @@ impl PBXObject for PBXShellScriptBuildPhase {
         "PBXShellScriptBuildPhase"
     }
 
-    fn id(&self) -> &ObjectId {
-        &self.id
-    }
-
     fn as_any(&self) -> &dyn std::any::Any {
         self
     }
@@ -251,10 +235,6 @@ impl PBXObject for PBXCopyFilesBuildPhase {
         "PBXCopyFilesBuildPhase"
     }
 
-    fn id(&self) -> &ObjectId {
-        &self.id
-    }
-
     fn as_any(&self) -> &dyn std::any::Any {
         self
     }
@@ -291,10 +271,6 @@ impl PBXBuildFile {
 impl PBXObject for PBXBuildFile {
     fn isa(&self) -> &'static str {
         "PBXBuildFile"
-    }
-
-    fn id(&self) -> &ObjectId {
-        &self.id
     }
 
     fn as_any(&self) -> &dyn std::any::Any {
@@ -384,10 +360,6 @@ impl Default for PBXHeadersBuildPhase {
 impl PBXObject for PBXHeadersBuildPhase {
     fn isa(&self) -> &'static str {
         "PBXHeadersBuildPhase"
-    }
-
-    fn id(&self) -> &ObjectId {
-        &self.id
     }
 
     fn as_any(&self) -> &dyn std::any::Any {
