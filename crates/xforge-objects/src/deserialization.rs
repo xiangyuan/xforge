@@ -1008,14 +1008,21 @@ fn deserialize_remote_swift_package_reference(dict: &IndexMap<String, PlistValue
 }
 
 fn deserialize_swift_package_product_dependency(dict: &IndexMap<String, PlistValue>) -> Result<XCSwiftPackageProductDependency, String> {
-    let product_name = dict.get("productName")
+    let raw_name = dict.get("productName")
         .and_then(|v| v.as_string())
         .unwrap_or("")
         .to_string();
+    let (product_name, is_plugin) = if let Some(stripped) = raw_name.strip_prefix("plugin:") {
+        (stripped.to_string(), true)
+    } else {
+        (raw_name, false)
+    };
     let package = dict.get("package")
         .and_then(|v| v.as_string())
         .and_then(|s| ObjectId::from_uuid_string(s).ok());
-    Ok(XCSwiftPackageProductDependency::new(package, product_name))
+    let mut dep = XCSwiftPackageProductDependency::new(package, product_name);
+    dep.is_plugin = is_plugin;
+    Ok(dep)
 }
 
 fn deserialize_version_group(dict: &IndexMap<String, PlistValue>) -> Result<XCVersionGroup, String> {

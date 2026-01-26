@@ -8,6 +8,7 @@ pub struct XCSwiftPackageProductDependency {
     id: ObjectId,
     pub package: Option<ObjectId>,
     pub product_name: String,
+    pub is_plugin: bool,
 }
 
 impl XCSwiftPackageProductDependency {
@@ -16,15 +17,26 @@ impl XCSwiftPackageProductDependency {
             id: ObjectId::generate(),
             package,
             product_name: product_name.into(),
+            is_plugin: false,
         }
     }
 
     pub fn new_with_package(package: ObjectId, product_name: impl Into<String>) -> Self {
         Self::new(Some(package), product_name)
     }
+
+    pub fn new_plugin(package: Option<ObjectId>, product_name: impl Into<String>) -> Self {
+        let mut dep = Self::new(package, product_name);
+        dep.is_plugin = true;
+        dep
+    }
     
     pub fn product_name(&self) -> &str {
         &self.product_name
+    }
+
+    pub fn is_plugin(&self) -> bool {
+        self.is_plugin
     }
 }
 
@@ -146,6 +158,14 @@ mod tests {
         let dep = XCSwiftPackageProductDependency::new_with_package(package_id, "Alamofire");
         assert_eq!(dep.isa(), "XCSwiftPackageProductDependency");
         assert_eq!(dep.product_name(), "Alamofire");
+        assert!(!dep.is_plugin());
+    }
+
+    #[test]
+    fn test_swift_package_product_dependency_plugin() {
+        let dep = XCSwiftPackageProductDependency::new_plugin(None, "MyPlugin");
+        assert_eq!(dep.product_name(), "MyPlugin");
+        assert!(dep.is_plugin());
     }
 
     #[test]

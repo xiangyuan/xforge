@@ -503,7 +503,12 @@ pub(crate) fn serialize_local_swift_package_reference(local_ref: &XCLocalSwiftPa
 }
 
 pub(crate) fn serialize_swift_package_product_dependency(swift_product: &XCSwiftPackageProductDependency, dict: &mut IndexMap<String, PlistValue>) {
-    dict.insert("productName".to_string(), PlistValue::String(swift_product.product_name.clone()));
+    let product_name = if swift_product.is_plugin {
+        format!("plugin:{}", swift_product.product_name)
+    } else {
+        swift_product.product_name.clone()
+    };
+    dict.insert("productName".to_string(), PlistValue::String(product_name));
     if let Some(package) = swift_product.package {
         dict.insert("package".to_string(), PlistValue::String(package.to_string()));
     }

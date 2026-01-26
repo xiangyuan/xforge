@@ -159,9 +159,12 @@ impl Project {
     pub fn save<P: AsRef<Path>>(&self, path: P) -> Result<(), String> {
         let path = path.as_ref();
         
+        let mut file_format = self.file_format.clone();
+        sync_file_format_from_metadata(&self.metadata, &mut file_format);
+
         // Use Xcode-specific writer with proper formatting
         let root_uuid = self.root_id.to_string();
-        let content = xforge_objects::xcode_writer::write_xcode_project(&self.registry, &root_uuid, &self.file_format)?;
+        let content = xforge_objects::xcode_writer::write_xcode_project(&self.registry, &root_uuid, &file_format)?;
         
         fs::write(path, content)
             .map_err(|e| format!("Failed to write file: {}", e))?;
@@ -698,6 +701,15 @@ fn parse_root_version(value: Option<&xforge_serialization::PlistValue>, default:
             }
         }
         None => default,
+    }
+}
+
+fn sync_file_format_from_metadata(metadata: &ProjectMetadata, file_format: &mut ProjectFileFormat) {
+    if let Ok(version) = metadata.archive_version.parse::<i64>() {
+        file_format.archive_version = version;
+    }
+    if let Ok(version) = metadata.object_version.parse::<i64>() {
+        file_format.object_version = version;
     }
 }
 
