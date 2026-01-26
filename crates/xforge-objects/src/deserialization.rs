@@ -5,22 +5,30 @@ use xforge_serialization::PlistValue;
 use indexmap::IndexMap;
 
 use crate::{
+    pbx_build_rule::PBXBuildRule,
     pbx_project::PBXProject,
     pbx_target::PBXNativeTarget,
     pbx_file_reference::PBXFileReference,
     pbx_file_system_synchronized::{
         PBXFileSystemSynchronizedBuildFileExceptionSet,
+        PBXFileSystemSynchronizedGroupBuildPhaseMembershipExceptionSet,
         PBXFileSystemSynchronizedRootGroup,
     },
     pbx_group::PBXGroup,
     pbx_variant_group::PBXVariantGroup,
     pbx_build_configuration::{XCBuildConfiguration, XCConfigurationList},
     pbx_build_phase::{
-        PBXSourcesBuildPhase, PBXFrameworksBuildPhase, PBXResourcesBuildPhase,
+        PBXSourcesBuildPhase, PBXFrameworksBuildPhase, PBXResourcesBuildPhase, PBXRezBuildPhase,
         PBXShellScriptBuildPhase, PBXCopyFilesBuildPhase, PBXHeadersBuildPhase, PBXBuildFile,
     },
+    pbx_aggregate_target::PBXAggregateTarget,
     pbx_target_dependency::PBXTargetDependency,
     pbx_container_item_proxy::PBXContainerItemProxy,
+    pbx_legacy_target::PBXLegacyTarget,
+    pbx_reference_proxy::PBXReferenceProxy,
+    pbx_unknown::PBXUnknownObject,
+    xc_swift_package::{XCLocalSwiftPackageReference, XCSwiftPackageProductDependency, XCRemoteSwiftPackageReference, PackageRequirement},
+    xc_version_group::XCVersionGroup,
 };
 
 /// Deserialize the entire registry from PlistValue
@@ -57,8 +65,18 @@ pub fn deserialize_registry(plist: &PlistValue) -> Result<(Registry, ObjectId), 
                             registry.register_with_id(obj_id, project);
                         }
                     }
+                    "PBXAggregateTarget" => {
+                        if let Ok(target) = deserialize_aggregate_target(obj_dict) {
+                            registry.register_with_id(obj_id, target);
+                        }
+                    }
                     "PBXNativeTarget" => {
                         if let Ok(target) = deserialize_native_target(obj_dict) {
+                            registry.register_with_id(obj_id, target);
+                        }
+                    }
+                    "PBXLegacyTarget" => {
+                        if let Ok(target) = deserialize_legacy_target(obj_dict) {
                             registry.register_with_id(obj_id, target);
                         }
                     }
@@ -75,6 +93,11 @@ pub fn deserialize_registry(plist: &PlistValue) -> Result<(Registry, ObjectId), 
                     "PBXVariantGroup" => {
                         if let Ok(variant_group) = deserialize_variant_group(obj_dict) {
                             registry.register_with_id(obj_id, variant_group);
+                        }
+                    }
+                    "XCVersionGroup" => {
+                        if let Ok(version_group) = deserialize_version_group(obj_dict) {
+                            registry.register_with_id(obj_id, version_group);
                         }
                     }
                     "XCBuildConfiguration" => {
@@ -102,6 +125,11 @@ pub fn deserialize_registry(plist: &PlistValue) -> Result<(Registry, ObjectId), 
                             registry.register_with_id(obj_id, phase);
                         }
                     }
+                    "PBXRezBuildPhase" => {
+                        if let Ok(phase) = deserialize_rez_build_phase(obj_dict) {
+                            registry.register_with_id(obj_id, phase);
+                        }
+                    }
                     "PBXShellScriptBuildPhase" => {
                         if let Ok(phase) = deserialize_shell_script_build_phase(obj_dict) {
                             registry.register_with_id(obj_id, phase);
@@ -115,6 +143,11 @@ pub fn deserialize_registry(plist: &PlistValue) -> Result<(Registry, ObjectId), 
                     "PBXHeadersBuildPhase" => {
                         if let Ok(phase) = deserialize_headers_build_phase(obj_dict) {
                             registry.register_with_id(obj_id, phase);
+                        }
+                    }
+                    "PBXBuildRule" => {
+                        if let Ok(rule) = deserialize_build_rule(obj_dict) {
+                            registry.register_with_id(obj_id, rule);
                         }
                     }
                     "PBXBuildFile" => {
@@ -132,8 +165,18 @@ pub fn deserialize_registry(plist: &PlistValue) -> Result<(Registry, ObjectId), 
                             registry.register_with_id(obj_id, proxy);
                         }
                     }
+                    "PBXReferenceProxy" => {
+                        if let Ok(proxy) = deserialize_reference_proxy(obj_dict) {
+                            registry.register_with_id(obj_id, proxy);
+                        }
+                    }
                     "PBXFileSystemSynchronizedBuildFileExceptionSet" => {
                         if let Ok(exception_set) = deserialize_file_system_exception_set(obj_dict) {
+                            registry.register_with_id(obj_id, exception_set);
+                        }
+                    }
+                    "PBXFileSystemSynchronizedGroupBuildPhaseMembershipExceptionSet" => {
+                        if let Ok(exception_set) = deserialize_file_system_group_exception_set(obj_dict) {
                             registry.register_with_id(obj_id, exception_set);
                         }
                     }
@@ -142,9 +185,27 @@ pub fn deserialize_registry(plist: &PlistValue) -> Result<(Registry, ObjectId), 
                             registry.register_with_id(obj_id, sync_group);
                         }
                     }
+                    "XCLocalSwiftPackageReference" => {
+                        if let Ok(local_ref) = deserialize_local_swift_package_reference(obj_dict) {
+                            registry.register_with_id(obj_id, local_ref);
+                        }
+                    }
+                    "XCRemoteSwiftPackageReference" => {
+                        if let Ok(remote_ref) = deserialize_remote_swift_package_reference(obj_dict) {
+                            registry.register_with_id(obj_id, remote_ref);
+                        }
+                    }
+                    "XCSwiftPackageProductDependency" => {
+                        if let Ok(product_dep) = deserialize_swift_package_product_dependency(obj_dict) {
+                            registry.register_with_id(obj_id, product_dep);
+                        }
+                    }
                     _ => {
-                        // Skip unknown types for now
-                        eprintln!("Warning: Skipping unknown object type: {}", isa);
+                        let mut fields = obj_dict.clone();
+                        fields.remove("isa");
+                        let unknown = PBXUnknownObject::new(obj_id.clone(), isa, fields);
+                        registry.register_with_id(obj_id, unknown);
+                        eprintln!("Warning: Preserved unknown object type: {}", isa);
                     }
                 }
             }
@@ -152,6 +213,46 @@ pub fn deserialize_registry(plist: &PlistValue) -> Result<(Registry, ObjectId), 
     }
     
     Ok((registry, root_id))
+}
+
+fn deserialize_aggregate_target(dict: &IndexMap<String, PlistValue>) -> Result<PBXAggregateTarget, String> {
+    let name = dict.get("name")
+        .and_then(|v| v.as_string())
+        .ok_or("PBXAggregateTarget missing name")?
+        .to_string();
+    let mut target = PBXAggregateTarget::new(name);
+
+    if let Some(product_name) = dict.get("productName").and_then(|v| v.as_string()) {
+        target.product_name = Some(product_name.to_string());
+    }
+
+    if let Some(config_list_str) = dict.get("buildConfigurationList").and_then(|v| v.as_string()) {
+        if let Ok(config_list_id) = ObjectId::from_uuid_string(config_list_str) {
+            target.build_configuration_list = Some(Handle::from_id(config_list_id));
+        }
+    }
+
+    if let Some(phases_array) = dict.get("buildPhases").and_then(|v| v.as_array()) {
+        for phase_val in phases_array {
+            if let Some(phase_str) = phase_val.as_string() {
+                if let Ok(phase_id) = ObjectId::from_uuid_string(phase_str) {
+                    target.build_phases.push(Handle::from_id(phase_id));
+                }
+            }
+        }
+    }
+
+    if let Some(deps_array) = dict.get("dependencies").and_then(|v| v.as_array()) {
+        for dep_val in deps_array {
+            if let Some(dep_str) = dep_val.as_string() {
+                if let Ok(dep_id) = ObjectId::from_uuid_string(dep_str) {
+                    target.dependencies.push(Handle::from_id(dep_id));
+                }
+            }
+        }
+    }
+
+    Ok(target)
 }
 
 fn deserialize_project(dict: &IndexMap<String, PlistValue>) -> Result<PBXProject, String> {
@@ -330,6 +431,48 @@ fn deserialize_native_target(dict: &IndexMap<String, PlistValue>) -> Result<PBXN
         }
     }
     
+    Ok(target)
+}
+
+fn deserialize_legacy_target(dict: &IndexMap<String, PlistValue>) -> Result<PBXLegacyTarget, String> {
+    let name = dict.get("name")
+        .and_then(|v| v.as_string())
+        .ok_or("PBXLegacyTarget missing name")?
+        .to_string();
+    let build_tool_path = dict.get("buildToolPath")
+        .and_then(|v| v.as_string())
+        .unwrap_or("")
+        .to_string();
+
+    let mut target = PBXLegacyTarget::new(name, build_tool_path);
+
+    if let Some(product_name) = dict.get("productName").and_then(|v| v.as_string()) {
+        target.product_name = Some(product_name.to_string());
+    }
+    if let Some(config_list_str) = dict.get("buildConfigurationList").and_then(|v| v.as_string()) {
+        if let Ok(config_list_id) = ObjectId::from_uuid_string(config_list_str) {
+            target.build_configuration_list = Some(Handle::from_id(config_list_id));
+        }
+    }
+    if let Some(args) = dict.get("buildArgumentsString").and_then(|v| v.as_string()) {
+        target.build_arguments_string = Some(args.to_string());
+    }
+    if let Some(working_dir) = dict.get("buildWorkingDirectory").and_then(|v| v.as_string()) {
+        target.build_working_directory = Some(working_dir.to_string());
+    }
+    if let Some(pass) = dict.get("passBuildSettingsInEnvironment").and_then(plist_bool) {
+        target.pass_build_settings_in_environment = pass;
+    }
+    if let Some(deps_array) = dict.get("dependencies").and_then(|v| v.as_array()) {
+        for dep_val in deps_array {
+            if let Some(dep_str) = dep_val.as_string() {
+                if let Ok(dep_id) = ObjectId::from_uuid_string(dep_str) {
+                    target.dependencies.push(Handle::from_id(dep_id));
+                }
+            }
+        }
+    }
+
     Ok(target)
 }
 
@@ -640,6 +783,63 @@ fn deserialize_headers_build_phase(dict: &IndexMap<String, PlistValue>) -> Resul
     Ok(phase)
 }
 
+fn deserialize_rez_build_phase(dict: &IndexMap<String, PlistValue>) -> Result<PBXRezBuildPhase, String> {
+    let mut files = Vec::new();
+    if let Some(files_array) = dict.get("files").and_then(|v| v.as_array()) {
+        for file_id_val in files_array {
+            if let Some(id_str) = file_id_val.as_string() {
+                if let Ok(file_id) = ObjectId::from_uuid_string(id_str) {
+                    files.push(Handle::from_id(file_id));
+                }
+            }
+        }
+    }
+    let build_action_mask = dict.get("buildActionMask")
+        .and_then(|v| v.as_integer())
+        .unwrap_or(2147483647) as u32;
+    let run_only_for_deployment_postprocessing = dict.get("runOnlyForDeploymentPostprocessing")
+        .and_then(|v| v.as_integer())
+        .map(|i| i != 0)
+        .unwrap_or(false);
+
+    let mut phase = PBXRezBuildPhase::new();
+    phase.files = files;
+    phase.build_action_mask = build_action_mask;
+    phase.run_only_for_deployment_postprocessing = run_only_for_deployment_postprocessing;
+    Ok(phase)
+}
+
+fn deserialize_build_rule(dict: &IndexMap<String, PlistValue>) -> Result<PBXBuildRule, String> {
+    let compiler_spec = dict.get("compilerSpec")
+        .and_then(|v| v.as_string())
+        .unwrap_or("")
+        .to_string();
+    let file_type = dict.get("fileType")
+        .and_then(|v| v.as_string())
+        .unwrap_or("")
+        .to_string();
+    let mut rule = PBXBuildRule::new(compiler_spec, file_type);
+
+    rule.file_patterns = dict.get("filePatterns").and_then(|v| v.as_string()).map(|s| s.to_string());
+    rule.name = dict.get("name").and_then(|v| v.as_string()).map(|s| s.to_string());
+    rule.dependency_file = dict.get("dependencyFile").and_then(|v| v.as_string()).map(|s| s.to_string());
+    rule.is_editable = dict.get("isEditable").and_then(plist_bool).unwrap_or(true);
+    rule.script = dict.get("script").and_then(|v| v.as_string()).map(|s| s.to_string());
+    rule.run_once_per_architecture = dict.get("runOncePerArchitecture").and_then(plist_bool);
+
+    if let Some(outputs) = dict.get("outputFiles").and_then(|v| v.as_array()) {
+        rule.output_files = outputs.iter().filter_map(|v| v.as_string()).map(|s| s.to_string()).collect();
+    }
+    if let Some(inputs) = dict.get("inputFiles").and_then(|v| v.as_array()) {
+        rule.input_files = Some(inputs.iter().filter_map(|v| v.as_string()).map(|s| s.to_string()).collect());
+    }
+    if let Some(flags) = dict.get("outputFilesCompilerFlags").and_then(|v| v.as_array()) {
+        rule.output_files_compiler_flags = Some(flags.iter().filter_map(|v| v.as_string()).map(|s| s.to_string()).collect());
+    }
+
+    Ok(rule)
+}
+
 fn deserialize_build_file(dict: &IndexMap<String, PlistValue>) -> Result<PBXBuildFile, String> {
     let file_ref_id = dict.get("fileRef")
         .and_then(|v| v.as_string())
@@ -676,6 +876,20 @@ fn deserialize_target_dependency(dict: &IndexMap<String, PlistValue>) -> Result<
     dependency.target = target;
     dependency.target_proxy = target_proxy;
     Ok(dependency)
+}
+
+fn deserialize_reference_proxy(dict: &IndexMap<String, PlistValue>) -> Result<PBXReferenceProxy, String> {
+    let path = dict.get("path").and_then(|v| v.as_string()).unwrap_or("").to_string();
+    let file_type = dict.get("fileType").and_then(|v| v.as_string()).unwrap_or("").to_string();
+    let remote_ref = dict.get("remoteRef")
+        .and_then(|v| v.as_string())
+        .and_then(|s| ObjectId::from_uuid_string(s).ok())
+        .ok_or("PBXReferenceProxy missing remoteRef")?;
+    let mut proxy = PBXReferenceProxy::new(path, file_type, remote_ref);
+    if let Some(source_tree) = dict.get("sourceTree").and_then(|v| v.as_string()) {
+        proxy.source_tree = source_tree.to_string();
+    }
+    Ok(proxy)
 }
 
 fn deserialize_container_item_proxy(dict: &IndexMap<String, PlistValue>) -> Result<PBXContainerItemProxy, String> {
@@ -722,6 +936,32 @@ fn deserialize_file_system_exception_set(dict: &IndexMap<String, PlistValue>) ->
     Ok(exception_set)
 }
 
+fn deserialize_file_system_group_exception_set(dict: &IndexMap<String, PlistValue>) -> Result<PBXFileSystemSynchronizedGroupBuildPhaseMembershipExceptionSet, String> {
+    let build_phase = dict.get("buildPhase")
+        .and_then(|v| v.as_string())
+        .and_then(|s| ObjectId::from_uuid_string(s).ok())
+        .ok_or("PBXFileSystemSynchronizedGroupBuildPhaseMembershipExceptionSet missing buildPhase")?;
+    let mut exception_set = PBXFileSystemSynchronizedGroupBuildPhaseMembershipExceptionSet::new(build_phase);
+
+    if let Some(exceptions) = dict.get("membershipExceptions").and_then(|v| v.as_array()) {
+        exception_set.membership_exceptions = exceptions.iter()
+            .filter_map(|v| v.as_string())
+            .map(|s| s.to_string())
+            .collect();
+    }
+
+    if let Some(attrs_dict) = dict.get("attributesByRelativePath").and_then(|v| v.as_dictionary()) {
+        for (key, value) in attrs_dict {
+            if let Some(values) = value.as_array() {
+                let list = values.iter().filter_map(|v| v.as_string()).map(|s| s.to_string()).collect();
+                exception_set.attributes_by_relative_path.insert(key.clone(), list);
+            }
+        }
+    }
+
+    Ok(exception_set)
+}
+
 fn deserialize_file_system_synchronized_group(dict: &IndexMap<String, PlistValue>) -> Result<PBXFileSystemSynchronizedRootGroup, String> {
     let path = dict.get("path")
         .and_then(|v| v.as_string())
@@ -744,4 +984,102 @@ fn deserialize_file_system_synchronized_group(dict: &IndexMap<String, PlistValue
     }
     
     Ok(sync_group)
+}
+
+fn deserialize_local_swift_package_reference(dict: &IndexMap<String, PlistValue>) -> Result<XCLocalSwiftPackageReference, String> {
+    let relative_path = dict.get("relativePath")
+        .and_then(|v| v.as_string())
+        .ok_or("XCLocalSwiftPackageReference missing relativePath")?
+        .to_string();
+    Ok(XCLocalSwiftPackageReference::new(relative_path))
+}
+
+fn deserialize_remote_swift_package_reference(dict: &IndexMap<String, PlistValue>) -> Result<XCRemoteSwiftPackageReference, String> {
+    let repository_url = dict.get("repositoryURL")
+        .and_then(|v| v.as_string())
+        .unwrap_or("")
+        .to_string();
+
+    let requirement = dict.get("requirement")
+        .and_then(|v| v.as_dictionary())
+        .and_then(|req| parse_package_requirement(req));
+
+    Ok(XCRemoteSwiftPackageReference::new(repository_url, requirement))
+}
+
+fn deserialize_swift_package_product_dependency(dict: &IndexMap<String, PlistValue>) -> Result<XCSwiftPackageProductDependency, String> {
+    let product_name = dict.get("productName")
+        .and_then(|v| v.as_string())
+        .unwrap_or("")
+        .to_string();
+    let package = dict.get("package")
+        .and_then(|v| v.as_string())
+        .and_then(|s| ObjectId::from_uuid_string(s).ok());
+    Ok(XCSwiftPackageProductDependency::new(package, product_name))
+}
+
+fn deserialize_version_group(dict: &IndexMap<String, PlistValue>) -> Result<XCVersionGroup, String> {
+    let path = dict.get("path")
+        .and_then(|v| v.as_string())
+        .unwrap_or("")
+        .to_string();
+    let mut group = XCVersionGroup::new(path);
+    if let Some(source_tree) = dict.get("sourceTree").and_then(|v| v.as_string()) {
+        group.source_tree = source_tree.to_string();
+    }
+    if let Some(children_array) = dict.get("children").and_then(|v| v.as_array()) {
+        for child_val in children_array {
+            if let Some(child_str) = child_val.as_string() {
+                if let Ok(child_id) = ObjectId::from_uuid_string(child_str) {
+                    group.children.push(Handle::from_id(child_id));
+                }
+            }
+        }
+    }
+    if let Some(current_str) = dict.get("currentVersion").and_then(|v| v.as_string()) {
+        if let Ok(current_id) = ObjectId::from_uuid_string(current_str) {
+            group.current_version = Some(Handle::from_id(current_id));
+        }
+    }
+    if let Some(group_type) = dict.get("versionGroupType").and_then(|v| v.as_string()) {
+        group.version_group_type = group_type.to_string();
+    }
+    Ok(group)
+}
+
+fn parse_package_requirement(dict: &IndexMap<String, PlistValue>) -> Option<PackageRequirement> {
+    let kind = dict.get("kind").and_then(|v| v.as_string())?;
+    match kind {
+        "upToNextMajorVersion" => dict.get("minimumVersion")
+            .and_then(|v| v.as_string())
+            .map(|s| PackageRequirement::UpToNextMajorVersion(s.to_string())),
+        "upToNextMinorVersion" => dict.get("minimumVersion")
+            .and_then(|v| v.as_string())
+            .map(|s| PackageRequirement::UpToNextMinorVersion(s.to_string())),
+        "versionRange" => {
+            let min = dict.get("minimumVersion").and_then(|v| v.as_string())?;
+            let max = dict.get("maximumVersion").and_then(|v| v.as_string())?;
+            Some(PackageRequirement::Range { from: min.to_string(), to: max.to_string() })
+        }
+        "exactVersion" => dict.get("version").and_then(|v| v.as_string())
+            .map(|s| PackageRequirement::Exact(s.to_string())),
+        "branch" => dict.get("branch").and_then(|v| v.as_string())
+            .map(|s| PackageRequirement::Branch(s.to_string())),
+        "revision" => dict.get("revision").and_then(|v| v.as_string())
+            .map(|s| PackageRequirement::Revision(s.to_string())),
+        _ => None,
+    }
+}
+
+fn plist_bool(value: &PlistValue) -> Option<bool> {
+    match value {
+        PlistValue::Boolean(b) => Some(*b),
+        PlistValue::Integer(i) => Some(*i != 0),
+        PlistValue::String(s) => match s.as_str() {
+            "YES" | "yes" | "true" | "1" => Some(true),
+            "NO" | "no" | "false" | "0" => Some(false),
+            _ => None,
+        },
+        _ => None,
+    }
 }

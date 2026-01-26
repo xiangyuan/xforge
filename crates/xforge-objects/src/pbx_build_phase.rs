@@ -149,6 +149,44 @@ impl Default for PBXResourcesBuildPhase {
     }
 }
 
+/// Rez build phase (legacy Carbon resources)
+#[derive(Debug, Clone)]
+pub struct PBXRezBuildPhase {
+    id: ObjectId,
+    pub files: Vec<Handle<PBXBuildFile>>,
+    pub build_action_mask: u32,
+    pub run_only_for_deployment_postprocessing: bool,
+}
+
+impl PBXRezBuildPhase {
+    pub fn new() -> Self {
+        Self {
+            id: ObjectId::generate(),
+            files: Vec::new(),
+            build_action_mask: 2147483647,
+            run_only_for_deployment_postprocessing: false,
+        }
+    }
+}
+
+impl PBXObject for PBXRezBuildPhase {
+    fn isa(&self) -> &'static str {
+        "PBXRezBuildPhase"
+    }
+
+    fn id(&self) -> &ObjectId {
+        &self.id
+    }
+
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+
+    fn as_any_mut(&mut self) -> &mut dyn std::any::Any {
+        self
+    }
+}
+
 /// Shell script build phase
 #[derive(Debug, Clone)]
 pub struct PBXShellScriptBuildPhase {

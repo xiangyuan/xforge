@@ -1,5 +1,6 @@
 //! PBXFileSystemSynchronized types (Xcode 14+)
 
+use indexmap::IndexMap;
 use xforge_core::{ObjectId, PBXObject};
 
 /// PBXFileSystemSynchronizedBuildFileExceptionSet - Xcode 14+ file system synchronization exceptions
@@ -61,6 +62,44 @@ impl PBXFileSystemSynchronizedRootGroup {
 impl PBXObject for PBXFileSystemSynchronizedRootGroup {
     fn isa(&self) -> &'static str {
         "PBXFileSystemSynchronizedRootGroup"
+    }
+
+    fn id(&self) -> &ObjectId {
+        &self.id
+    }
+
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+
+    fn as_any_mut(&mut self) -> &mut dyn std::any::Any {
+        self
+    }
+}
+
+/// PBXFileSystemSynchronizedGroupBuildPhaseMembershipExceptionSet - Xcode 15+ group build phase membership exceptions
+#[derive(Debug, Clone)]
+pub struct PBXFileSystemSynchronizedGroupBuildPhaseMembershipExceptionSet {
+    id: ObjectId,
+    pub build_phase: ObjectId,
+    pub membership_exceptions: Vec<String>,
+    pub attributes_by_relative_path: IndexMap<String, Vec<String>>,
+}
+
+impl PBXFileSystemSynchronizedGroupBuildPhaseMembershipExceptionSet {
+    pub fn new(build_phase: ObjectId) -> Self {
+        Self {
+            id: ObjectId::generate(),
+            build_phase,
+            membership_exceptions: Vec::new(),
+            attributes_by_relative_path: IndexMap::new(),
+        }
+    }
+}
+
+impl PBXObject for PBXFileSystemSynchronizedGroupBuildPhaseMembershipExceptionSet {
+    fn isa(&self) -> &'static str {
+        "PBXFileSystemSynchronizedGroupBuildPhaseMembershipExceptionSet"
     }
 
     fn id(&self) -> &ObjectId {

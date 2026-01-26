@@ -1,6 +1,7 @@
 //! PBXProject - The root object of an Xcode project
 
 use xforge_core::{ObjectId, PBXObject};
+use crate::versioning::{compatibility_version_for, DEFAULT_OBJECT_VERSION};
 use xforge_serialization::PlistValue;
 use indexmap::IndexMap;
 
@@ -36,7 +37,9 @@ impl PBXProject {
             id: ObjectId::generate(),
             name: name.into(),
             build_configuration_list: None,
-            compatibility_version: "Xcode 14.0".to_string(),
+            compatibility_version: compatibility_version_for(DEFAULT_OBJECT_VERSION)
+                .unwrap_or("Xcode 14.0")
+                .to_string(),
             development_region: "en".to_string(),
             has_scanned_for_encodings: false,
             known_regions: vec!["en".to_string(), "Base".to_string()],

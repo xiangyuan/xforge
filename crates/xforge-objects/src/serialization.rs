@@ -6,18 +6,20 @@ use indexmap::IndexMap;
 use std::any::Any;
 
 use crate::{
+    pbx_build_rule::PBXBuildRule,
     pbx_project::PBXProject,
     pbx_target::PBXNativeTarget,
     pbx_file_reference::PBXFileReference,
     pbx_group::PBXGroup,
     pbx_build_configuration::{XCBuildConfiguration, XCConfigurationList},
     pbx_build_phase::{
-        PBXSourcesBuildPhase, PBXFrameworksBuildPhase, PBXResourcesBuildPhase,
+        PBXSourcesBuildPhase, PBXFrameworksBuildPhase, PBXResourcesBuildPhase, PBXRezBuildPhase,
         PBXShellScriptBuildPhase, PBXCopyFilesBuildPhase, PBXHeadersBuildPhase, PBXBuildFile,
     },
     pbx_container_item_proxy::PBXContainerItemProxy,
     pbx_file_system_synchronized::{
         PBXFileSystemSynchronizedBuildFileExceptionSet,
+        PBXFileSystemSynchronizedGroupBuildPhaseMembershipExceptionSet,
         PBXFileSystemSynchronizedRootGroup,
     },
     pbx_target_dependency::PBXTargetDependency,
@@ -25,22 +27,34 @@ use crate::{
     pbx_reference_proxy::PBXReferenceProxy,
     pbx_aggregate_target::PBXAggregateTarget,
     pbx_legacy_target::PBXLegacyTarget,
-    xc_swift_package::{XCSwiftPackageProductDependency, XCRemoteSwiftPackageReference},
+    pbx_unknown::PBXUnknownObject,
+    versioning::ProjectFileFormat,
+    xc_swift_package::{XCLocalSwiftPackageReference, XCSwiftPackageProductDependency, XCRemoteSwiftPackageReference},
     xc_version_group::XCVersionGroup,
 };
 
 /// Serialize the entire registry to PlistValue
 pub fn serialize_registry(registry: &Registry, root_project_id: &str) -> PlistValue {
+    let format = ProjectFileFormat::default();
+    serialize_registry_with_format(registry, root_project_id, &format)
+}
+
+/// Serialize the entire registry to PlistValue with specific file format settings.
+pub fn serialize_registry_with_format(
+    registry: &Registry,
+    root_project_id: &str,
+    format: &ProjectFileFormat,
+) -> PlistValue {
     let mut root_dict = IndexMap::new();
     
     // Archive version
-    root_dict.insert("archiveVersion".to_string(), PlistValue::String("1".to_string()));
+    root_dict.insert("archiveVersion".to_string(), PlistValue::Integer(format.archive_version));
     
     // Classes (empty)
-    root_dict.insert("classes".to_string(), PlistValue::Dictionary(IndexMap::new()));
+    root_dict.insert("classes".to_string(), PlistValue::Dictionary(format.classes.clone()));
     
     // Object version
-    root_dict.insert("objectVersion".to_string(), PlistValue::Integer(56));
+    root_dict.insert("objectVersion".to_string(), PlistValue::Integer(format.object_version));
     
     // Objects dictionary
     let mut objects = IndexMap::new();
@@ -56,6 +70,10 @@ pub fn serialize_registry(registry: &Registry, root_project_id: &str) -> PlistVa
     
     // Root object
     root_dict.insert("rootObject".to_string(), PlistValue::String(root_project_id.to_string()));
+
+    for (key, value) in &format.root_unknown_fields {
+        root_dict.entry(key.clone()).or_insert_with(|| value.clone());
+    }
     
     PlistValue::Dictionary(root_dict)
 }
@@ -65,6 +83,13 @@ pub(crate) fn serialize_object(obj: &dyn PBXObject, _registry: &Registry) -> Opt
     let mut dict = IndexMap::new();
     
     // Add isa field
+    if let Some(unknown) = obj.as_any().downcast_ref::<PBXUnknownObject>() {
+        dict.insert("isa".to_string(), PlistValue::String(unknown.actual_isa().to_string()));
+        for (key, value) in unknown.fields() {
+            dict.insert(key.clone(), value.clone());
+        }
+        return Some(PlistValue::Dictionary(dict));
+    }
     dict.insert("isa".to_string(), PlistValue::String(obj.isa().to_string()));
     
     // Try to downcast to specific types and serialize their fields
@@ -72,6 +97,8 @@ pub(crate) fn serialize_object(obj: &dyn PBXObject, _registry: &Registry) -> Opt
     
     if let Some(project) = any_obj.downcast_ref::<PBXProject>() {
         serialize_project(project, &mut dict);
+    } else if let Some(build_rule) = any_obj.downcast_ref::<PBXBuildRule>() {
+        serialize_build_rule(build_rule, &mut dict);
     } else if let Some(target) = any_obj.downcast_ref::<PBXNativeTarget>() {
         serialize_target(target, &mut dict);
     } else if let Some(file_ref) = any_obj.downcast_ref::<PBXFileReference>() {
@@ -88,6 +115,8 @@ pub(crate) fn serialize_object(obj: &dyn PBXObject, _registry: &Registry) -> Opt
         serialize_build_phase_common(&frameworks.files, frameworks.build_action_mask, frameworks.run_only_for_deployment_postprocessing, &mut dict);
     } else if let Some(resources) = any_obj.downcast_ref::<PBXResourcesBuildPhase>() {
         serialize_build_phase_common(&resources.files, resources.build_action_mask, resources.run_only_for_deployment_postprocessing, &mut dict);
+    } else if let Some(rez) = any_obj.downcast_ref::<PBXRezBuildPhase>() {
+        serialize_build_phase_common(&rez.files, rez.build_action_mask, rez.run_only_for_deployment_postprocessing, &mut dict);
     } else if let Some(shell) = any_obj.downcast_ref::<PBXShellScriptBuildPhase>() {
         serialize_shell_script_phase(shell, &mut dict);
     } else if let Some(copy) = any_obj.downcast_ref::<PBXCopyFilesBuildPhase>() {
@@ -100,6 +129,8 @@ pub(crate) fn serialize_object(obj: &dyn PBXObject, _registry: &Registry) -> Opt
         serialize_container_item_proxy(proxy, &mut dict);
     } else if let Some(exception_set) = any_obj.downcast_ref::<PBXFileSystemSynchronizedBuildFileExceptionSet>() {
         serialize_file_system_exception_set(exception_set, &mut dict);
+    } else if let Some(membership_set) = any_obj.downcast_ref::<PBXFileSystemSynchronizedGroupBuildPhaseMembershipExceptionSet>() {
+        serialize_file_system_group_exception_set(membership_set, &mut dict);
     } else if let Some(sync_group) = any_obj.downcast_ref::<PBXFileSystemSynchronizedRootGroup>() {
         serialize_file_system_synchronized_group(sync_group, &mut dict);
     } else if let Some(dependency) = any_obj.downcast_ref::<PBXTargetDependency>() {
@@ -108,6 +139,8 @@ pub(crate) fn serialize_object(obj: &dyn PBXObject, _registry: &Registry) -> Opt
         serialize_variant_group(variant_group, &mut dict);
     } else if let Some(ref_proxy) = any_obj.downcast_ref::<PBXReferenceProxy>() {
         serialize_reference_proxy(ref_proxy, &mut dict);
+    } else if let Some(local_ref) = any_obj.downcast_ref::<XCLocalSwiftPackageReference>() {
+        serialize_local_swift_package_reference(local_ref, &mut dict);
     } else if let Some(swift_product) = any_obj.downcast_ref::<XCSwiftPackageProductDependency>() {
         serialize_swift_package_product_dependency(swift_product, &mut dict);
     } else if let Some(swift_ref) = any_obj.downcast_ref::<XCRemoteSwiftPackageReference>() {
@@ -465,38 +498,111 @@ pub(crate) fn serialize_reference_proxy(ref_proxy: &PBXReferenceProxy, dict: &mu
     dict.insert("sourceTree".to_string(), PlistValue::String(ref_proxy.source_tree.clone()));
 }
 
+pub(crate) fn serialize_local_swift_package_reference(local_ref: &XCLocalSwiftPackageReference, dict: &mut IndexMap<String, PlistValue>) {
+    dict.insert("relativePath".to_string(), PlistValue::String(local_ref.relative_path.clone()));
+}
+
 pub(crate) fn serialize_swift_package_product_dependency(swift_product: &XCSwiftPackageProductDependency, dict: &mut IndexMap<String, PlistValue>) {
     dict.insert("productName".to_string(), PlistValue::String(swift_product.product_name.clone()));
-    dict.insert("package".to_string(), PlistValue::String(swift_product.package.to_string()));
+    if let Some(package) = swift_product.package {
+        dict.insert("package".to_string(), PlistValue::String(package.to_string()));
+    }
 }
 
 pub(crate) fn serialize_remote_swift_package_reference(swift_ref: &XCRemoteSwiftPackageReference, dict: &mut IndexMap<String, PlistValue>) {
     dict.insert("repositoryURL".to_string(), PlistValue::String(swift_ref.repository_url.clone()));
     
-    let mut req_dict = IndexMap::new();
-    match &swift_ref.requirement {
-        crate::xc_swift_package::PackageRequirement::UpToNextMajorVersion(version) => {
-            req_dict.insert("kind".to_string(), PlistValue::String("upToNextMajorVersion".to_string()));
-            req_dict.insert("minimumVersion".to_string(), PlistValue::String(version.clone()));
+    if let Some(requirement) = &swift_ref.requirement {
+        let mut req_dict = IndexMap::new();
+        match requirement {
+            crate::xc_swift_package::PackageRequirement::UpToNextMajorVersion(version) => {
+                req_dict.insert("kind".to_string(), PlistValue::String("upToNextMajorVersion".to_string()));
+                req_dict.insert("minimumVersion".to_string(), PlistValue::String(version.clone()));
+            }
+            crate::xc_swift_package::PackageRequirement::UpToNextMinorVersion(version) => {
+                req_dict.insert("kind".to_string(), PlistValue::String("upToNextMinorVersion".to_string()));
+                req_dict.insert("minimumVersion".to_string(), PlistValue::String(version.clone()));
+            }
+            crate::xc_swift_package::PackageRequirement::Range { from, to } => {
+                req_dict.insert("kind".to_string(), PlistValue::String("versionRange".to_string()));
+                req_dict.insert("minimumVersion".to_string(), PlistValue::String(from.clone()));
+                req_dict.insert("maximumVersion".to_string(), PlistValue::String(to.clone()));
+            }
+            crate::xc_swift_package::PackageRequirement::Exact(version) => {
+                req_dict.insert("kind".to_string(), PlistValue::String("exactVersion".to_string()));
+                req_dict.insert("version".to_string(), PlistValue::String(version.clone()));
+            }
+            crate::xc_swift_package::PackageRequirement::Branch(branch) => {
+                req_dict.insert("kind".to_string(), PlistValue::String("branch".to_string()));
+                req_dict.insert("branch".to_string(), PlistValue::String(branch.clone()));
+            }
+            crate::xc_swift_package::PackageRequirement::Revision(revision) => {
+                req_dict.insert("kind".to_string(), PlistValue::String("revision".to_string()));
+                req_dict.insert("revision".to_string(), PlistValue::String(revision.clone()));
+            }
         }
-        crate::xc_swift_package::PackageRequirement::UpToNextMinorVersion(version) => {
-            req_dict.insert("kind".to_string(), PlistValue::String("upToNextMinorVersion".to_string()));
-            req_dict.insert("minimumVersion".to_string(), PlistValue::String(version.clone()));
-        }
-        crate::xc_swift_package::PackageRequirement::Exact(version) => {
-            req_dict.insert("kind".to_string(), PlistValue::String("exactVersion".to_string()));
-            req_dict.insert("version".to_string(), PlistValue::String(version.clone()));
-        }
-        crate::xc_swift_package::PackageRequirement::Branch(branch) => {
-            req_dict.insert("kind".to_string(), PlistValue::String("branch".to_string()));
-            req_dict.insert("branch".to_string(), PlistValue::String(branch.clone()));
-        }
-        crate::xc_swift_package::PackageRequirement::Revision(revision) => {
-            req_dict.insert("kind".to_string(), PlistValue::String("revision".to_string()));
-            req_dict.insert("revision".to_string(), PlistValue::String(revision.clone()));
-        }
+        dict.insert("requirement".to_string(), PlistValue::Dictionary(req_dict));
     }
-    dict.insert("requirement".to_string(), PlistValue::Dictionary(req_dict));
+}
+
+pub(crate) fn serialize_build_rule(rule: &PBXBuildRule, dict: &mut IndexMap<String, PlistValue>) {
+    dict.insert("compilerSpec".to_string(), PlistValue::String(rule.compiler_spec.clone()));
+    dict.insert("fileType".to_string(), PlistValue::String(rule.file_type.clone()));
+    dict.insert("isEditable".to_string(), PlistValue::Integer(if rule.is_editable { 1 } else { 0 }));
+
+    if let Some(ref patterns) = rule.file_patterns {
+        dict.insert("filePatterns".to_string(), PlistValue::String(patterns.clone()));
+    }
+    if let Some(ref name) = rule.name {
+        dict.insert("name".to_string(), PlistValue::String(name.clone()));
+    }
+    if let Some(ref dep) = rule.dependency_file {
+        dict.insert("dependencyFile".to_string(), PlistValue::String(dep.clone()));
+    }
+    if !rule.output_files.is_empty() {
+        let files: Vec<PlistValue> = rule.output_files.iter().map(|s| PlistValue::String(s.clone())).collect();
+        dict.insert("outputFiles".to_string(), PlistValue::Array(files));
+    } else {
+        dict.insert("outputFiles".to_string(), PlistValue::Array(Vec::new()));
+    }
+    if let Some(ref files) = rule.input_files {
+        let vals: Vec<PlistValue> = files.iter().map(|s| PlistValue::String(s.clone())).collect();
+        dict.insert("inputFiles".to_string(), PlistValue::Array(vals));
+    }
+    if let Some(ref flags) = rule.output_files_compiler_flags {
+        let vals: Vec<PlistValue> = flags.iter().map(|s| PlistValue::String(s.clone())).collect();
+        dict.insert("outputFilesCompilerFlags".to_string(), PlistValue::Array(vals));
+    }
+    if let Some(ref script) = rule.script {
+        dict.insert("script".to_string(), PlistValue::String(script.clone()));
+    }
+    if let Some(run_once) = rule.run_once_per_architecture {
+        dict.insert("runOncePerArchitecture".to_string(), PlistValue::Integer(if run_once { 1 } else { 0 }));
+    }
+}
+
+pub(crate) fn serialize_file_system_group_exception_set(
+    exception_set: &PBXFileSystemSynchronizedGroupBuildPhaseMembershipExceptionSet,
+    dict: &mut IndexMap<String, PlistValue>,
+) {
+    dict.insert("buildPhase".to_string(), PlistValue::String(exception_set.build_phase.to_string()));
+
+    if !exception_set.membership_exceptions.is_empty() {
+        let exceptions: Vec<PlistValue> = exception_set.membership_exceptions
+            .iter()
+            .map(|s| PlistValue::String(s.clone()))
+            .collect();
+        dict.insert("membershipExceptions".to_string(), PlistValue::Array(exceptions));
+    }
+
+    if !exception_set.attributes_by_relative_path.is_empty() {
+        let mut attrs = IndexMap::new();
+        for (key, values) in &exception_set.attributes_by_relative_path {
+            let vals: Vec<PlistValue> = values.iter().map(|s| PlistValue::String(s.clone())).collect();
+            attrs.insert(key.clone(), PlistValue::Array(vals));
+        }
+        dict.insert("attributesByRelativePath".to_string(), PlistValue::Dictionary(attrs));
+    }
 }
 
 #[cfg(test)]

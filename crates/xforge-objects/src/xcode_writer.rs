@@ -7,13 +7,14 @@
 //! - UUID reference comments
 
 use crate::*;
+use crate::versioning::ProjectFileFormat;
 use xforge_core::{Registry, PBXObject};
 use xforge_serialization::PlistValue;
 use indexmap::IndexMap;
 use std::collections::HashMap;
 
 /// Write a complete Xcode project file with proper formatting
-pub fn write_xcode_project(registry: &Registry, root_id: &str) -> Result<String, String> {
+pub fn write_xcode_project(registry: &Registry, root_id: &str, file_format: &ProjectFileFormat) -> Result<String, String> {
     let mut output = String::new();
     
     // Build UUID comment cache
@@ -26,14 +27,21 @@ pub fn write_xcode_project(registry: &Registry, root_id: &str) -> Result<String,
     output.push_str("{\n");
     
     // 3. Archive version
-    output.push_str("\tarchiveVersion = 1;\n");
+    output.push_str(&format!("\tarchiveVersion = {};\n", file_format.archive_version));
     
     // 4. Empty classes
     output.push_str("\tclasses = {\n");
+    if !file_format.classes.is_empty() {
+        write_dict_multiline(&mut output, &file_format.classes, 2, &uuid_comments)?;
+    }
     output.push_str("\t};\n");
     
     // 5. Object version  
-    output.push_str("\tobjectVersion = 56;\n");
+    output.push_str(&format!("\tobjectVersion = {};\n", file_format.object_version));
+
+    if !file_format.root_unknown_fields.is_empty() {
+        write_root_unknown_fields(&mut output, &file_format.root_unknown_fields, &uuid_comments)?;
+    }
     
     // 6. Objects section with grouping
     output.push_str("\tobjects = {\n");
@@ -85,6 +93,34 @@ fn build_uuid_comment_cache(registry: &Registry) -> HashMap<String, String> {
     cache
 }
 
+fn object_isa(obj: &dyn PBXObject) -> &str {
+    use std::any::Any;
+    let any_obj = obj as &dyn Any;
+    if let Some(unknown) = any_obj.downcast_ref::<PBXUnknownObject>() {
+        unknown.actual_isa()
+    } else {
+        obj.isa()
+    }
+}
+
+fn write_root_unknown_fields(
+    output: &mut String,
+    fields: &IndexMap<String, PlistValue>,
+    uuid_comments: &HashMap<String, String>,
+) -> Result<(), String> {
+    for (key, value) in fields {
+        output.push('\t');
+        if needs_quotes(key) {
+            output.push_str(&format!("\"{}\" = ", key));
+        } else {
+            output.push_str(&format!("{} = ", key));
+        }
+        write_value_multiline(output, value, 1, false, uuid_comments)?;
+        output.push_str(";\n");
+    }
+    Ok(())
+}
+
 /// Get comment for PBXBuildFile with build phase suffix
 fn get_build_file_comment_with_phase(build_file_id: &str, obj: &dyn PBXObject, registry: &Registry) -> Option<String> {
     use std::any::Any;
@@ -122,7 +158,7 @@ fn write_objects_with_sections(output: &mut String, registry: &Registry, uuid_co
     let mut grouped: HashMap<String, Vec<(String, &dyn PBXObject)>> = HashMap::new();
     
     for (id, obj) in registry.iter() {
-        let isa = obj.isa();
+        let isa = object_isa(obj.as_ref());
         grouped.entry(isa.to_string())
             .or_insert_with(Vec::new)
             .push((id.clone(), obj.as_ref()));
@@ -157,7 +193,7 @@ fn write_objects_with_sections(output: &mut String, registry: &Registry, uuid_co
 
 /// Write a single object with proper formatting
 fn write_object(output: &mut String, id: &str, obj: &dyn PBXObject, registry: &Registry, uuid_comments: &HashMap<String, String>) -> Result<(), String> {
-    let isa = obj.isa();
+    let isa = object_isa(obj);
     // Use the comment from the cache (built by build_uuid_comment_cache)
     let comment = uuid_comments.get(id);
     
@@ -191,9 +227,15 @@ fn serialize_object_to_dict(obj: &dyn PBXObject, registry: &Registry) -> Result<
     use std::any::Any;
     
     let mut dict = IndexMap::new();
-    dict.insert("isa".to_string(), PlistValue::String(obj.isa().to_string()));
-    
     let any_obj = obj as &dyn Any;
+    if let Some(unknown) = any_obj.downcast_ref::<PBXUnknownObject>() {
+        dict.insert("isa".to_string(), PlistValue::String(unknown.actual_isa().to_string()));
+        for (key, value) in unknown.fields() {
+            dict.insert(key.clone(), value.clone());
+        }
+        return Ok(dict);
+    }
+    dict.insert("isa".to_string(), PlistValue::String(obj.isa().to_string()));
     
     // Use existing serialization functions
     if let Some(project) = any_obj.downcast_ref::<PBXProject>() {

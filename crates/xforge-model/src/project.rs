@@ -1,6 +1,7 @@
 //! Project - Core domain model for Xcode projects
 
 use xforge_core::{ObjectId, Registry, Handle};
+use xforge_objects::versioning::{ProjectFileFormat, DEFAULT_OBJECT_VERSION, LAST_KNOWN_ARCHIVE_VERSION};
 use std::path::{Path, PathBuf};
 use std::fs;
 
@@ -10,6 +11,7 @@ pub struct Project {
     registry: Registry,
     root_id: ObjectId,
     metadata: ProjectMetadata,
+    file_format: ProjectFileFormat,
 }
 
 /// Project metadata
@@ -25,8 +27,8 @@ pub struct ProjectMetadata {
 impl Default for ProjectMetadata {
     fn default() -> Self {
         Self {
-            archive_version: "1".to_string(),
-            object_version: "56".to_string(),
+            archive_version: LAST_KNOWN_ARCHIVE_VERSION.to_string(),
+            object_version: DEFAULT_OBJECT_VERSION.to_string(),
             name: "Project".to_string(),
             organization: None,
             development_region: "en".to_string(),
@@ -44,7 +46,7 @@ impl Project {
         let mut metadata = ProjectMetadata::default();
         metadata.name = name;
         
-        Self { path, registry, root_id, metadata }
+        Self { path, registry, root_id, metadata, file_format: ProjectFileFormat::default() }
     }
     
     pub fn name(&self) -> &str {
@@ -100,15 +102,10 @@ impl Project {
         let root_dict = plist.as_dictionary()
             .ok_or("Root value must be a dictionary")?;
         
-        let archive_version = root_dict.get("archiveVersion")
-            .and_then(|v| v.as_string())
-            .unwrap_or("1")
-            .to_string();
-        
-        let object_version = root_dict.get("objectVersion")
-            .and_then(|v| v.as_string())
-            .unwrap_or("56")
-            .to_string();
+        let archive_version_num = parse_root_version(root_dict.get("archiveVersion"), LAST_KNOWN_ARCHIVE_VERSION);
+        let object_version_num = parse_root_version(root_dict.get("objectVersion"), DEFAULT_OBJECT_VERSION);
+        let archive_version = archive_version_num.to_string();
+        let object_version = object_version_num.to_string();
         
         // Get project name from .xcodeproj directory name
         // Path is typically: /path/to/ProjectName.xcodeproj/project.pbxproj
@@ -125,6 +122,18 @@ impl Project {
             organization: None,
             development_region: "en".to_string(),
         };
+
+        let classes = root_dict.get("classes")
+            .and_then(|v| v.as_dictionary())
+            .cloned()
+            .unwrap_or_default();
+        let mut root_unknown_fields = indexmap::IndexMap::new();
+        for (key, value) in root_dict {
+            if matches!(key.as_str(), "archiveVersion" | "classes" | "objectVersion" | "objects" | "rootObject") {
+                continue;
+            }
+            root_unknown_fields.insert(key.clone(), value.clone());
+        }
         
         // Update PBXProject object's name field
         let mut registry = registry;
@@ -137,6 +146,12 @@ impl Project {
             registry,
             root_id,
             metadata,
+            file_format: ProjectFileFormat {
+                archive_version: archive_version_num,
+                object_version: object_version_num,
+                classes,
+                root_unknown_fields,
+            },
         })
     }
     
@@ -146,7 +161,7 @@ impl Project {
         
         // Use Xcode-specific writer with proper formatting
         let root_uuid = self.root_id.to_string();
-        let content = xforge_objects::xcode_writer::write_xcode_project(&self.registry, &root_uuid)?;
+        let content = xforge_objects::xcode_writer::write_xcode_project(&self.registry, &root_uuid, &self.file_format)?;
         
         fs::write(path, content)
             .map_err(|e| format!("Failed to write file: {}", e))?;
@@ -668,6 +683,21 @@ impl Project {
         }
         
         Ok(phase_handle)
+    }
+}
+
+fn parse_root_version(value: Option<&xforge_serialization::PlistValue>, default: i64) -> i64 {
+    match value {
+        Some(v) => {
+            if let Some(i) = v.as_integer() {
+                i
+            } else if let Some(s) = v.as_string() {
+                s.parse::<i64>().unwrap_or(default)
+            } else {
+                default
+            }
+        }
+        None => default,
     }
 }
 
