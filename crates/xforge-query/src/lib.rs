@@ -211,19 +211,19 @@ impl RegistryExt for Registry {
                 // Try native target
                 if let Some(target) = self.get::<PBXNativeTarget>(target_id) {
                     if target.name() == name {
-                        return Ok(target_id.clone());
+                        return Ok(*target_id);
                     }
                 }
                 // Try aggregate target
                 if let Some(target) = self.get::<PBXAggregateTarget>(target_id) {
                     if target.name() == name {
-                        return Ok(target_id.clone());
+                        return Ok(*target_id);
                     }
                 }
                 // Try legacy target
                 if let Some(target) = self.get::<PBXLegacyTarget>(target_id) {
                     if target.name() == name {
-                        return Ok(target_id.clone());
+                        return Ok(*target_id);
                     }
                 }
             }
@@ -251,7 +251,7 @@ impl RegistryExt for Registry {
             for child in group.children() {
                 if let Some(file_ref) = self.get::<PBXFileReference>(child) {
                     if file_ref.path() == Some(path) {
-                        return Ok(child.clone());
+                        return Ok(*child);
                     }
                 }
             }
@@ -265,12 +265,12 @@ impl RegistryExt for Registry {
         // If empty path, return root group
         if components.is_empty() {
             if self.get::<PBXGroup>(root_group_id).is_some() {
-                return Ok(root_group_id.clone());
+                return Ok(*root_group_id);
             }
             return Err(QueryError::GroupNotFound(path.to_string()));
         }
 
-        let mut current_group_id = root_group_id.clone();
+        let mut current_group_id = *root_group_id;
         
         for component in components {
             if let Some(group) = self.get::<PBXGroup>(&current_group_id) {
@@ -278,7 +278,7 @@ impl RegistryExt for Registry {
                 for child in group.children() {
                     if let Some(child_group) = self.get::<PBXGroup>(child) {
                         if child_group.path() == Some(component) {
-                            current_group_id = child.clone();
+                            current_group_id = *child;
                             found = true;
                             break;
                         }
@@ -308,7 +308,7 @@ impl RegistryExt for Registry {
             for config in config_list.build_configurations() {
                 if let Some(cfg) = self.get::<XCBuildConfiguration>(config.id()) {
                     if cfg.name() == name {
-                        return Ok(config.id().clone());
+                        return Ok(*config.id());
                     }
                 }
             }
@@ -318,7 +318,7 @@ impl RegistryExt for Registry {
 
     fn get_configurations(&self, config_list_id: &ObjectId) -> QueryResult<Vec<ObjectId>> {
         if let Some(config_list) = self.get::<XCConfigurationList>(config_list_id) {
-            Ok(config_list.build_configurations().iter().map(|h| h.id().clone()).collect())
+            Ok(config_list.build_configurations().iter().map(|h| *h.id()).collect())
         } else {
             Err(QueryError::RegistryError("Configuration list not found".to_string()))
         }
@@ -338,7 +338,7 @@ impl RegistryExt for Registry {
         }
         if let Some(target) = self.get::<PBXAggregateTarget>(target_id) {
             // PBXAggregateTarget uses Handle<PBXTargetDependency>
-            return Ok(target.dependencies.iter().map(|h| h.id().clone()).collect());
+            return Ok(target.dependencies.iter().map(|h| *h.id()).collect());
         }
         Err(QueryError::RegistryError("Not a valid target".to_string()))
     }
@@ -365,7 +365,7 @@ impl RegistryExt for Registry {
                 if let Some(file_ref) = self.get::<PBXFileReference>(child) {
                     if let Some(path) = file_ref.path() {
                         if path.ends_with(&format!(".{}", extension)) {
-                            result.push(child.clone());
+                            result.push(*child);
                         }
                     }
                 }
@@ -431,11 +431,10 @@ impl RegistryExt for Registry {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use xforge_objects::*;
 
     #[test]
     fn test_registry_ext() {
-        let registry = Registry::new();
+        let _registry = Registry::new();
         // Basic smoke test - just ensure trait is available
     }
     
@@ -446,16 +445,16 @@ mod tests {
         // Create a native target with dependencies
         let dep1 = PBXTargetDependency::new();
         let dep1_handle = registry.register(dep1);
-        let dep1_id = dep1_handle.id().clone();
+        let dep1_id = *dep1_handle.id();
         
         let dep2 = PBXTargetDependency::new();
         let dep2_handle = registry.register(dep2);
-        let dep2_id = dep2_handle.id().clone();
+        let dep2_id = *dep2_handle.id();
         
         let mut target = PBXNativeTarget::new("TestTarget");
-        target.dependencies.push(dep1_id.clone());
-        target.dependencies.push(dep2_id.clone());
-        let target_id = registry.register(target).id().clone();
+        target.dependencies.push(dep1_id);
+        target.dependencies.push(dep2_id);
+        let target_id = *registry.register(target).id();
         
         // Test getting dependencies
         let deps = registry.get_target_dependencies(&target_id).unwrap();
@@ -470,10 +469,10 @@ mod tests {
         
         // Create a target
         let target = PBXNativeTarget::new("MainTarget");
-        let target_id = registry.register(target).id().clone();
+        let target_id = *registry.register(target).id();
         
         // Create a dependency pointing to that target
-        let dep = PBXTargetDependency::new().with_target(target_id.clone());
+        let dep = PBXTargetDependency::new().with_target(target_id);
         let dep_id = registry.register(dep);
         
         // Test finding the target
@@ -501,9 +500,9 @@ mod tests {
         let mut target = PBXNativeTarget::new("TestTarget");
         let pkg1 = ObjectId::generate();
         let pkg2 = ObjectId::generate();
-        target.package_product_dependencies.push(pkg1.clone());
-        target.package_product_dependencies.push(pkg2.clone());
-        let target_id = registry.register(target).id().clone();
+        target.package_product_dependencies.push(pkg1);
+        target.package_product_dependencies.push(pkg2);
+        let target_id = *registry.register(target).id();
         
         // Test getting package dependencies
         let pkgs = registry.get_swift_package_dependencies(&target_id).unwrap();
@@ -521,20 +520,20 @@ mod tests {
         
         let swift_file1 = PBXFileReference::new("File1.swift");
         let swift_file1_handle = registry.register(swift_file1);
-        let swift_file1_id = swift_file1_handle.id().clone();
-        group.add_child(swift_file1_handle);
+        let swift_file1_id = *swift_file1_handle.id();
+        group.add_child(*swift_file1_handle.id());
         
         let swift_file2 = PBXFileReference::new("File2.swift");
         let swift_file2_handle = registry.register(swift_file2);
-        let swift_file2_id = swift_file2_handle.id().clone();
-        group.add_child(swift_file2_handle);
+        let swift_file2_id = *swift_file2_handle.id();
+        group.add_child(*swift_file2_handle.id());
         
         let h_file = PBXFileReference::new("Header.h");
         let h_file_handle = registry.register(h_file);
-        let h_file_id = h_file_handle.id().clone();
-        group.add_child(h_file_handle);
+        let h_file_id = *h_file_handle.id();
+        group.add_child(*h_file_handle.id());
         
-        let group_id = registry.register(group).id().clone();
+        let group_id = *registry.register(group).id();
         
         // Test finding Swift files
         let swift_files = registry.find_files_by_extension(&group_id, "swift").unwrap();
@@ -545,6 +544,7 @@ mod tests {
         // Test finding header files
         let h_files = registry.find_files_by_extension(&group_id, "h").unwrap();
         assert_eq!(h_files.len(), 1);
+        assert!(h_files.contains(&h_file_id));
     }
     
     #[test]
@@ -556,19 +556,19 @@ mod tests {
         
         let swift1 = PBXFileReference::new("File1.swift");
         let handle1 = registry.register(swift1);
-        let id1 = handle1.id().clone();
-        group.add_child(handle1);
+        let id1 = *handle1.id();
+        group.add_child(*handle1.id());
         
         let swift2 = PBXFileReference::new("File2.swift");
         let handle2 = registry.register(swift2);
-        let id2 = handle2.id().clone();
-        group.add_child(handle2);
+        let id2 = *handle2.id();
+        group.add_child(*handle2.id());
         
         let objc = PBXFileReference::new("File.m");
         let handle3 = registry.register(objc);
-        group.add_child(handle3);
+        group.add_child(*handle3.id());
         
-        let group_id = registry.register(group).id().clone();
+        let group_id = *registry.register(group).id();
         
         // Test finding Swift files
         let swift_files = registry.find_files_by_extension(&group_id, "swift").unwrap();
@@ -590,26 +590,26 @@ mod tests {
         // Add various source files
         let swift_file = PBXFileReference::new("File.swift");
         let swift_handle = registry.register(swift_file);
-        let swift_id = swift_handle.id().clone();
+        let swift_id = *swift_handle.id();
         
         let m_file = PBXFileReference::new("File.m");
         let m_handle = registry.register(m_file);
-        let m_id = m_handle.id().clone();
+        let m_id = *m_handle.id();
         
         let h_file = PBXFileReference::new("File.h");
         let h_handle = registry.register(h_file);
-        let h_id = h_handle.id().clone();
+        let h_id = *h_handle.id();
         
         // Add a non-source file
         let json_file = PBXFileReference::new("data.json");
         let json_handle = registry.register(json_file);
         
-        group.add_child(swift_handle);
-        group.add_child(m_handle);
-        group.add_child(h_handle);
-        group.add_child(json_handle);
+        group.add_child(*swift_handle.id());
+        group.add_child(*m_handle.id());
+        group.add_child(*h_handle.id());
+        group.add_child(*json_handle.id());
         
-        let group_id = registry.register(group).id().clone();
+        let group_id = *registry.register(group).id();
         
         // Test finding all source files
         let sources = registry.find_all_source_files(&group_id).unwrap();
@@ -626,7 +626,7 @@ mod tests {
         let mut config = XCBuildConfiguration::new("Debug");
         config.set_build_setting("PRODUCT_NAME", "MyApp");
         config.set_build_setting("SDKROOT", "iphoneos");
-        let config_id = registry.register(config).id().clone();
+        let config_id = *registry.register(config).id();
         
         // Test getting all settings
         let settings = registry.get_all_build_settings(&config_id).unwrap();
@@ -692,7 +692,6 @@ mod tests {
 #[cfg(test)]
 mod new_query_tests {
     use super::*;
-    use xforge_objects::*;
 
     #[test]
     fn test_get_target_dependencies() {
@@ -700,12 +699,12 @@ mod new_query_tests {
         
         // Create a target with dependencies
         let mut target = PBXNativeTarget::new("TestTarget");
-        let dep1 = registry.register(PBXTargetDependency::new()).id().clone();
-        let dep2 = registry.register(PBXTargetDependency::new()).id().clone();
-        target.dependencies.push(dep1.clone());
-        target.dependencies.push(dep2.clone());
+        let dep1 = *registry.register(PBXTargetDependency::new()).id();
+        let dep2 = *registry.register(PBXTargetDependency::new()).id();
+        target.dependencies.push(dep1);
+        target.dependencies.push(dep2);
         
-        let target_id = registry.register(target).id().clone();
+        let target_id = *registry.register(target).id();
         
         // Test the query
         let deps = registry.get_target_dependencies(&target_id).unwrap();
@@ -719,11 +718,11 @@ mod new_query_tests {
         let mut registry = Registry::new();
         
         // Create a dependency with a target
-        let target = registry.register(PBXNativeTarget::new("TargetA")).id().clone();
+        let target = *registry.register(PBXNativeTarget::new("TargetA")).id();
         let mut dep = PBXTargetDependency::new();
-        dep.target = Some(target.clone());
+        dep.target = Some(target);
         
-        let dep_id = registry.register(dep).id().clone();
+        let dep_id = *registry.register(dep).id();
         
         // Test the query
         let found = registry.find_dependency_target(&dep_id).unwrap();
@@ -738,10 +737,10 @@ mod new_query_tests {
         let mut target = PBXNativeTarget::new("TestTarget");
         let pkg_dep1 = ObjectId::generate();
         let pkg_dep2 = ObjectId::generate();
-        target.package_product_dependencies.push(pkg_dep1.clone());
-        target.package_product_dependencies.push(pkg_dep2.clone());
+        target.package_product_dependencies.push(pkg_dep1);
+        target.package_product_dependencies.push(pkg_dep2);
         
-        let target_id = registry.register(target).id().clone();
+        let target_id = *registry.register(target).id();
         
         // Test the query
         let pkg_deps = registry.get_swift_package_dependencies(&target_id).unwrap();
@@ -759,14 +758,14 @@ mod new_query_tests {
         
         let swift_file = PBXFileReference::new("main.swift");
         let swift_handle = registry.register(swift_file);
-        let swift_id = swift_handle.id().clone();
-        group.add_child(swift_handle);
+        let swift_id = *swift_handle.id();
+        group.add_child(*swift_handle.id());
         
         let objc_file = PBXFileReference::new("Helper.m");
         let objc_handle = registry.register(objc_file);
-        group.add_child(objc_handle);
+        group.add_child(*objc_handle.id());
         
-        let group_id = registry.register(group).id().clone();
+        let group_id = *registry.register(group).id();
         
         // Test finding Swift files
         let swift_files = registry.find_files_by_extension(&group_id, "swift").unwrap();
@@ -783,17 +782,17 @@ mod new_query_tests {
         
         let swift_file = PBXFileReference::new("main.swift");
         let swift_handle = registry.register(swift_file);
-        group.add_child(swift_handle);
+        group.add_child(*swift_handle.id());
         
         let h_file = PBXFileReference::new("Header.h");
         let h_handle = registry.register(h_file);
-        group.add_child(h_handle);
+        group.add_child(*h_handle.id());
         
         let txt_file = PBXFileReference::new("README.txt");
         let txt_handle = registry.register(txt_file);
-        group.add_child(txt_handle);
+        group.add_child(*txt_handle.id());
         
-        let group_id = registry.register(group).id().clone();
+        let group_id = *registry.register(group).id();
         
         // Test finding all source files (should exclude txt)
         let source_files = registry.find_all_source_files(&group_id).unwrap();
@@ -809,7 +808,7 @@ mod new_query_tests {
         config.set_build_setting("PRODUCT_NAME", "MyApp");
         config.set_build_setting("SWIFT_VERSION", "5.0");
         
-        let config_id = registry.register(config).id().clone();
+        let config_id = *registry.register(config).id();
         
         // Test the query
         let settings = registry.get_all_build_settings(&config_id).unwrap();
@@ -828,7 +827,7 @@ mod new_query_tests {
         debug_config.set_build_setting("SWIFT_OPTIMIZATION_LEVEL", "-Onone");
         debug_config.set_build_setting("PRODUCT_NAME", "MyApp");
         
-        let debug_id = registry.register(debug_config).id().clone();
+        let debug_id = *registry.register(debug_config).id();
         
         // Create Release configuration
         let mut release_config = XCBuildConfiguration::new("Release");
@@ -836,7 +835,7 @@ mod new_query_tests {
         release_config.set_build_setting("SWIFT_OPTIMIZATION_LEVEL", "-O");
         release_config.set_build_setting("PRODUCT_NAME", "MyApp");
         
-        let release_id = registry.register(release_config).id().clone();
+        let release_id = *registry.register(release_config).id();
         
         // Test comparison
         let diffs = registry.compare_build_settings(&debug_id, &release_id).unwrap();

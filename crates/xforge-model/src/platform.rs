@@ -7,6 +7,7 @@ pub use xforge_core::ProductType;
 
 /// Target platform
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[allow(non_camel_case_types)]
 pub enum Platform {
     /// iOS devices
     #[serde(rename = "iphoneos")]

@@ -32,7 +32,7 @@ impl<'a> TargetQuery<'a> {
                 for config_handle in config_list.build_configurations() {
                     if let Some(config) = self.registry.get::<XCBuildConfiguration>(config_handle.id()) {
                         if config.name() == name {
-                            return Ok(config_handle.clone());
+                            return Ok(*config_handle);
                         }
                     }
                 }
@@ -53,7 +53,7 @@ impl<'a> TargetQuery<'a> {
     pub fn sources_phase(&self) -> QueryResult<Handle<PBXSourcesBuildPhase>> {
         for phase_handle in self.target.build_phases() {
             if self.registry.get::<PBXSourcesBuildPhase>(phase_handle.id()).is_some() {
-                return Ok(Handle::from_id(phase_handle.id().clone()));
+                return Ok(Handle::from_id(*phase_handle.id()));
             }
         }
         Err(QueryError::BuildPhaseNotFound("Sources".to_string()))
@@ -62,7 +62,7 @@ impl<'a> TargetQuery<'a> {
     pub fn frameworks_phase(&self) -> QueryResult<Handle<PBXFrameworksBuildPhase>> {
         for phase_handle in self.target.build_phases() {
             if self.registry.get::<PBXFrameworksBuildPhase>(phase_handle.id()).is_some() {
-                return Ok(Handle::from_id(phase_handle.id().clone()));
+                return Ok(Handle::from_id(*phase_handle.id()));
             }
         }
         Err(QueryError::BuildPhaseNotFound("Frameworks".to_string()))
@@ -71,7 +71,7 @@ impl<'a> TargetQuery<'a> {
     pub fn resources_phase(&self) -> QueryResult<Handle<PBXResourcesBuildPhase>> {
         for phase_handle in self.target.build_phases() {
             if self.registry.get::<PBXResourcesBuildPhase>(phase_handle.id()).is_some() {
-                return Ok(Handle::from_id(phase_handle.id().clone()));
+                return Ok(Handle::from_id(*phase_handle.id()));
             }
         }
         Err(QueryError::BuildPhaseNotFound("Resources".to_string()))

@@ -284,7 +284,7 @@ impl Project {
         file_ref: xforge_core::Handle<xforge_objects::PBXFileReference>,
         target: xforge_core::Handle<xforge_objects::PBXNativeTarget>,
     ) -> Result<(), String> {
-        use xforge_objects::{PBXBuildFile, PBXSourcesBuildPhase};
+        use xforge_objects::PBXSourcesBuildPhase;
         
         // Get the sources build phase ID from target (separate scope to release borrow)
         let sources_phase_id = {
@@ -741,7 +741,7 @@ mod tests {
             .expect("File reference not found");
         assert_eq!(file_ref.path, Some("Sources/main.swift".to_string()));
         assert_eq!(file_ref.name, Some("main.swift".to_string()));
-        assert_eq!(file_ref.explicit_file_type, Some("sourcecode.swift".to_string()));
+        assert_eq!(file_ref.last_known_file_type, Some("sourcecode.swift".to_string()));
     }
 
     #[test]
@@ -784,7 +784,7 @@ mod tests {
         let group = project.registry().get::<xforge_objects::PBXGroup>(group_handle.id())
             .expect("Group not found");
         assert_eq!(group.children.len(), 1);
-        assert_eq!(*group.children[0].id(), *file_handle.id());
+        assert_eq!(group.children[0], *file_handle.id());
     }
 
     #[test]

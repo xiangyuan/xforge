@@ -202,7 +202,7 @@ pub fn deserialize_registry(plist: &PlistValue) -> Result<(Registry, ObjectId), 
                     }
                     _ => {
                         let mut fields = obj_dict.clone();
-                        fields.remove("isa");
+                        fields.shift_remove("isa");
                         let unknown = PBXUnknownObject::new(obj_id.clone(), isa, fields);
                         registry.register_with_id(obj_id, unknown);
                         eprintln!("Warning: Preserved unknown object type: {}", isa);

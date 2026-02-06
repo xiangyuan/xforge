@@ -43,7 +43,7 @@ pub struct Scheme {
 impl Scheme {
     /// Creates a new scheme with default configuration
     pub fn new(
-        name: impl Into<String>,
+        _name: impl Into<String>,
         debug_config: impl Into<String>,
         release_config: impl Into<String>,
     ) -> Self {
