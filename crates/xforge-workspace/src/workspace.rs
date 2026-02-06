@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use crate::{FileRef, Group, Result};
 
 /// Represents an Xcode workspace
@@ -122,7 +122,6 @@ impl Workspace {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::FileRefLocation;
 
     #[test]
     fn test_workspace_creation() {

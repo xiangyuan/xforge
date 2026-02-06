@@ -59,7 +59,6 @@ impl TargetBuilder {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use xforge_core::PBXObject;
 
     #[test]
     fn test_target_builder_basic() {

@@ -35,7 +35,7 @@ impl<'a> ProjectQuery<'a> {
         for target_handle in root_proj.targets() {
             if let Some(target) = self.registry().get::<PBXNativeTarget>(target_handle.id()) {
                 if target.name() == name {
-                    return Ok(target_handle.clone());
+                    return Ok(*target_handle);
                 }
             }
         }
@@ -52,7 +52,7 @@ impl<'a> ProjectQuery<'a> {
         for target_handle in root_proj.targets() {
             if let Some(target) = self.registry().get::<PBXNativeTarget>(target_handle.id()) {
                 if predicate(target) {
-                    results.push(target_handle.clone());
+                    results.push(*target_handle);
                 }
             }
         }
@@ -107,13 +107,13 @@ impl<'a> ProjectQuery<'a> {
                 if let Some(file) = self.registry().get::<PBXFileReference>(child_handle.id()) {
                     if let Some(file_path) = file.path() {
                         if file_path == path {
-                            return Ok(Handle::from_id(child_handle.id().clone()));
+                            return Ok(Handle::from_id(*child_handle.id()));
                         }
                     }
                 }
                 if self.registry().get::<PBXGroup>(child_handle.id()).is_some() {
                     if let Ok(result) = self.find_file_in_group(
-                        &Handle::from_id(child_handle.id().clone()),
+                        &Handle::from_id(*child_handle.id()),
                         path,
                     ) {
                         return Ok(result);
@@ -134,11 +134,11 @@ impl<'a> ProjectQuery<'a> {
                 if let Some(subgroup) = self.registry().get::<PBXGroup>(child_handle.id()) {
                     if let Some(group_path) = subgroup.path() {
                         if group_path == path {
-                            return Ok(Handle::from_id(child_handle.id().clone()));
+                            return Ok(Handle::from_id(*child_handle.id()));
                         }
                     }
                     if let Ok(result) = self.find_group_in_group(
-                        &Handle::from_id(child_handle.id().clone()),
+                        &Handle::from_id(*child_handle.id()),
                         path,
                     ) {
                         return Ok(result);

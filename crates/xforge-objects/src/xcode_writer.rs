@@ -223,7 +223,7 @@ fn write_object(output: &mut String, id: &str, obj: &dyn PBXObject, registry: &R
 }
 
 /// Serialize an object to a dictionary (reusing existing serialization)
-fn serialize_object_to_dict(obj: &dyn PBXObject, registry: &Registry) -> Result<IndexMap<String, PlistValue>, String> {
+fn serialize_object_to_dict(obj: &dyn PBXObject, _registry: &Registry) -> Result<IndexMap<String, PlistValue>, String> {
     use std::any::Any;
     
     let mut dict = IndexMap::new();
@@ -530,8 +530,6 @@ fn get_object_comment(obj: &dyn PBXObject, registry: &Registry) -> Option<String
 /// Get detailed comment for XCConfigurationList
 /// Format: "Build configuration list for PBXNativeTarget \"Unity-iPhone\""
 fn get_config_list_comment(config_list_uuid: &str, registry: &Registry) -> Option<String> {
-    use xforge_core::PBXObject;
-    
     // Search for targets or project that reference this configuration list
     for (_id, obj) in registry.iter() {
         let any_obj = obj.as_any();
@@ -560,6 +558,7 @@ fn get_config_list_comment(config_list_uuid: &str, registry: &Registry) -> Optio
 }
 
 /// Get comment for a UUID reference
+#[allow(dead_code)]
 fn get_uuid_comment(uuid: &str, registry: &Registry) -> Option<String> {
     let uuid_obj = xforge_core::ObjectId::from_uuid_string(uuid).ok()?;
     // Try all possible types
@@ -581,7 +580,7 @@ fn get_uuid_comment(uuid: &str, registry: &Registry) -> Option<String> {
     if let Some(obj) = registry.get::<XCBuildConfiguration>(&uuid_obj) {
         return get_object_comment(obj, registry);
     }
-    if let Some(obj) = registry.get::<XCConfigurationList>(&uuid_obj) {
+    if let Some(_obj) = registry.get::<XCConfigurationList>(&uuid_obj) {
         return get_config_list_comment(uuid, registry);
     }
     if let Some(obj) = registry.get::<PBXSourcesBuildPhase>(&uuid_obj) {
@@ -605,7 +604,7 @@ fn get_uuid_comment(uuid: &str, registry: &Registry) -> Option<String> {
     if let Some(obj) = registry.get::<PBXContainerItemProxy>(&uuid_obj) {
         return get_object_comment(obj, registry);
     }
-    if let Some(obj) = registry.get::<PBXTargetDependency>(&uuid_obj) {
+    if let Some(_obj) = registry.get::<PBXTargetDependency>(&uuid_obj) {
         return Some("PBXTargetDependency".to_string());
     }
     None

@@ -46,7 +46,6 @@ impl Group {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::FileRefLocation;
 
     #[test]
     fn test_group_creation() {

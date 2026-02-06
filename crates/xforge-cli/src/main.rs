@@ -2,9 +2,9 @@ use clap::{Parser, Subcommand};
 use std::path::PathBuf;
 use xforge_model::Project;
 use xforge_core::ProductType;
-use xforge_workspace::{Workspace, FileRef};
-use xforge_scheme::{Scheme, BuildableReference};
-use xforge_config::{XCConfig, BuildContext};
+use xforge_workspace::Workspace;
+use xforge_scheme::Scheme;
+use xforge_config::XCConfig;
 
 #[derive(Parser)]
 #[command(name = "xforge")]
@@ -213,7 +213,7 @@ fn cmd_add_file(
         .map_err(|e| format!("Failed to load project: {}", e))?;
     
     println!("Adding file: {}", file_path.display());
-    let file_handle = project.add_file(file_path, None)
+    let _file_handle = project.add_file(file_path, None)
         .map_err(|e| format!("Failed to add file: {}", e))?;
     
     if let Some(target_name) = target_name {

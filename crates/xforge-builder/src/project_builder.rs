@@ -1,6 +1,6 @@
 //! Project builder for fluent API
 
-use xforge_model::{Project, ProjectMetadata};
+use xforge_model::Project;
 use std::path::PathBuf;
 
 /// Builder for creating projects with fluent API

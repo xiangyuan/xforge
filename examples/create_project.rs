@@ -33,7 +33,7 @@ fn main() -> anyhow::Result<()> {
     println!("   - Static Library: {}", ProductType::StaticLibrary.as_str());
     
     println!("\n💾 Saving project...");
-    project.save()?;
+    project.save("MyAwesomeApp.xcodeproj/project.pbxproj").map_err(|e| anyhow::anyhow!(e))?;
     
     println!("\n🎉 Done! Project structure:");
     println!("   {}/", project.name());

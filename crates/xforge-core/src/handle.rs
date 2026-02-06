@@ -20,11 +20,6 @@ impl<T> Handle<T> {
         }
     }
     
-    /// Create a new handle (internal use)
-    pub(crate) fn new(id: ObjectId) -> Self {
-        Self::from_id(id)
-    }
-    
     /// Get the underlying ObjectId
     pub fn id(&self) -> &ObjectId {
         &self.id
